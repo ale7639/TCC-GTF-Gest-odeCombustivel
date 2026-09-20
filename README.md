@@ -6,7 +6,7 @@ Este projeto será desenvolvido em equipe por três integrantes:
 
 * Wallace
 * Diego
-* Gabriel
+
 
 Para manter o código organizado e evitar conflitos, utilizaremos uma estratégia de versionamento com Git baseada em branches. Todos os integrantes devem seguir estas regras durante todo o desenvolvimento do projeto.
 
