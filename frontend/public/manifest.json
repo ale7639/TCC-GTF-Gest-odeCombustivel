@@ -1,0 +1,16 @@
+{
+  "name": "GFC — Gestão de Combustível e Frota",
+  "short_name": "GFC",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1C4D3A",
+  "theme_color": "#1C4D3A",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# Apenas lixo local — projeto acadêmico compartilha deps e .env para o parceiro
+.DS_Store
+Thumbs.db
+*.log
+/backend/storage/logs/*.log
+/backend/.env.backup
+/.tools/

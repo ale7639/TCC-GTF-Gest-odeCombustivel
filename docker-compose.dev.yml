@@ -1,0 +1,66 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: gfc-mysql
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_DATABASE: gfc
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_USER: gfc
+      MYSQL_PASSWORD: secret
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-psecret"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - gfc_mysql_data:/var/lib/mysql
+
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gfc-app
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: gfc
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+    volumes:
+      - ./backend:/var/www/html
+      - gfc_vendor:/var/www/html/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: gfc-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: secret
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  gfc_mysql_data:
+  gfc_vendor:
