@@ -1,7 +1,0 @@
-vendor
-.git
-.env
-storage/logs/*
-bootstrap/cache/*.php
-composer-setup.php
-tests
