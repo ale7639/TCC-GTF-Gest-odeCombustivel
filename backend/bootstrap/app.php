@@ -1,12 +1,8 @@
 <?php
 
-use App\Http\Middleware\EnsureUserRole;
-use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,22 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware) {
-        $middleware->alias([
-            'role' => EnsureUserRole::class,
-        ]);
+    ->withMiddleware(function (Middleware $middleware): void {
+        //
     })
-    ->withSchedule(function (Schedule $schedule) {
-        $schedule->command('gfc:gerar-alertas')->dailyAt('06:00');
-    })
-    ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (HttpException $e, Request $request) {
-            if (! $request->is('api/*')) {
-                return null;
-            }
-
-            return response()->json([
-                'message' => $e->getMessage() ?: 'Não foi possível concluir a operação.',
-            ], $e->getStatusCode());
-        });
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
     })->create();
