@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import Login from './src/screens/Login';
 import Dashboard from './src/screens/Dashboard';
+import Caminhoes from './src/screens/Caminhoes';
 
 const Tab = createBottomTabNavigator();
 
@@ -25,7 +26,6 @@ function EmBreve({ titulo }) {
     </View>
   );
 }
-const TelaCaminhoes = () => <EmBreve titulo="Caminhões" />;
 const TelaMotoristas = () => <EmBreve titulo="Motoristas" />;
 
 // Decide o que mostrar: carregando, login (sem sessão) ou as abas (com sessão).
@@ -53,7 +53,7 @@ function Rotas() {
         })}
       >
         <Tab.Screen name="Painel" component={Dashboard} />
-        <Tab.Screen name="Caminhões" component={TelaCaminhoes} />
+        <Tab.Screen name="Caminhões" component={Caminhoes} />
         <Tab.Screen name="Motoristas" component={TelaMotoristas} />
       </Tab.Navigator>
     </NavigationContainer>

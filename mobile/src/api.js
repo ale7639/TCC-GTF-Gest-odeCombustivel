@@ -34,7 +34,11 @@ export async function api(caminho, { metodo = 'GET', corpo } = {}) {
     // 401 com token guardado = sessão não vale mais; volta para o login.
     if (resposta.status === 401 && token) aoExpirar();
 
-    if (!resposta.ok) throw new Error(json?.message || `Erro ${resposta.status}`);
+    // Em erros de validação (422), o Laravel manda a lista de campos com problema;
+    // mostramos a primeira mensagem, que já está em português.
+    const primeiroErro = json?.errors ? Object.values(json.errors)[0]?.[0] : null;
+
+    if (!resposta.ok) throw new Error(primeiroErro || json?.message || `Erro ${resposta.status}`);
     return json;
   } finally {
     clearTimeout(timer);

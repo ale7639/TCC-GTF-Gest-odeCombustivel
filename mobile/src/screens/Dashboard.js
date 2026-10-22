@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 
@@ -46,10 +47,12 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Carrega os dados uma vez, quando a tela abre.
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  // Recarrega os dados toda vez que a aba é aberta (assim reflete cadastros feitos em outras telas).
+  useFocusEffect(
+    useCallback(() => {
+      carregar();
+    }, [carregar])
+  );
 
   return (
     <ScrollView
