@@ -26,11 +26,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('caminhoes', CaminhaoController::class)
         ->parameters(['caminhoes' => 'caminhao']);
     Route::apiResource('motoristas', MotoristaController::class);
+    Route::apiResource('tanques', TanqueController::class);
 
     // Abastecimentos: só listar, registrar e excluir (para corrigir erros).
     Route::apiResource('abastecimentos', AbastecimentoController::class)
         ->only(['index', 'store', 'destroy']);
-
-    // Tanques: por enquanto só a lista (o cadastro entra junto com as entradas de combustível).
-    Route::get('/tanques', [TanqueController::class, 'index']);
 });

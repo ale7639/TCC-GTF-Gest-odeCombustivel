@@ -9,6 +9,7 @@ import Dashboard from './src/screens/Dashboard';
 import Caminhoes from './src/screens/Caminhoes';
 import Motoristas from './src/screens/Motoristas';
 import Abastecimentos from './src/screens/Abastecimentos';
+import Tanques from './src/screens/Tanques';
 
 const Tab = createBottomTabNavigator();
 
@@ -18,6 +19,7 @@ const icones = {
   Caminhões: 'truck-outline',
   Motoristas: 'account-group-outline',
   Abastecimentos: 'gas-station-outline',
+  Tanques: 'water-outline',
 };
 
 // Decide o que mostrar: carregando, login (sem sessão) ou as abas (com sessão).
@@ -48,6 +50,7 @@ function Rotas() {
         <Tab.Screen name="Caminhões" component={Caminhoes} />
         <Tab.Screen name="Motoristas" component={Motoristas} />
         <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
+        <Tab.Screen name="Tanques" component={Tanques} />
       </Tab.Navigator>
     </NavigationContainer>
   );
