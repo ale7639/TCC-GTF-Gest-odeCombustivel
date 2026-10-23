@@ -3,64 +3,108 @@
 namespace App\Http\Controllers;
 
 use App\Models\Caminhao;
+use App\Support\Auditoria;
+use App\Support\Consumo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class CaminhaoController extends Controller
 {
-    // GET /api/caminhoes — lista todos, com o nome do motorista responsável.
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $caminhoes = Caminhao::with('motorista:id,nome')->orderBy('placa')->get();
+        $this->authorize('viewAny', Caminhao::class);
 
-        return response()->json($caminhoes);
+        $query = Caminhao::with('motorista:id,nome,telefone,ativo')->orderBy('placa');
+        $usuario = $request->user();
+
+        if ($usuario->isMotorista()) {
+            $query->where('motorista_id', $usuario->motorista_id);
+        }
+
+        if ($busca = $request->string('q')->toString()) {
+            $query->where(function ($q) use ($busca) {
+                $q->where('placa', 'like', "%{$busca}%")
+                    ->orWhere('modelo', 'like', "%{$busca}%");
+            });
+        }
+
+        if ($status = $request->string('status')->toString()) {
+            $query->where('status', $status);
+        }
+
+        return response()->json($query->get());
     }
 
-    // POST /api/caminhoes — cadastra um caminhão novo.
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Caminhao::class);
         $caminhao = Caminhao::create($this->validar($request));
+        Auditoria::registrar('caminhao.criar', $caminhao, ['placa' => $caminhao->placa]);
 
-        return response()->json($caminhao->load('motorista:id,nome'), 201);
+        return response()->json($caminhao->load('motorista:id,nome,telefone'), 201);
     }
 
-    // GET /api/caminhoes/{id} — um caminhão só.
-    public function show(Caminhao $caminhao): JsonResponse
+    public function show(Request $request, Caminhao $caminhao): JsonResponse
     {
-        return response()->json($caminhao->load('motorista:id,nome'));
+        $this->authorize('view', $caminhao);
+        $caminhao->load('motorista:id,nome,cpf,cnh,telefone,ativo');
+        $abastecimentos = $caminhao->abastecimentos()
+            ->with(['tanque:id,nome', 'motorista:id,nome'])
+            ->orderByDesc('data')
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get();
+
+        $anteriores = $caminhao->abastecimentos()->orderBy('km')->orderBy('data')->orderBy('id')->get();
+        $porId = Consumo::trechos($anteriores)->keyBy('abastecimento_id');
+        $abastecimentos->transform(function ($item) use ($porId) {
+            $item->setAttribute('km_l', $porId[$item->id]['km_l'] ?? null);
+
+            return $item;
+        });
+
+        return response()->json($caminhao->toArray() + [
+            'abastecimentos' => $abastecimentos,
+            'media_km_l' => $caminhao->media_km_l,
+        ]);
     }
 
-    // PUT /api/caminhoes/{id} — altera os dados de um caminhão.
     public function update(Request $request, Caminhao $caminhao): JsonResponse
     {
+        $this->authorize('update', $caminhao);
         $caminhao->update($this->validar($request, $caminhao));
+        Auditoria::registrar('caminhao.editar', $caminhao, ['placa' => $caminhao->placa]);
 
-        return response()->json($caminhao->load('motorista:id,nome'));
+        return response()->json($caminhao->load('motorista:id,nome,telefone'));
     }
 
-    // DELETE /api/caminhoes/{id} — exclui, mas só se não houver histórico.
     public function destroy(Caminhao $caminhao): JsonResponse
     {
+        $this->authorize('delete', $caminhao);
+
         $temHistorico = $caminhao->abastecimentos()->exists()
             || $caminhao->lavagens()->exists()
             || $caminhao->manutencoes()->exists();
 
         if ($temHistorico) {
+            $caminhao->update(['status' => 'inativo', 'motorista_id' => null]);
+            Auditoria::registrar('caminhao.desativar', $caminhao);
+
             return response()->json([
-                'message' => 'Este caminhão tem histórico de abastecimentos, lavagens ou manutenções. Mude o status para "inativo" em vez de excluir.',
-            ], 409);
+                'message' => 'Este caminhão tem histórico. Ele foi desativado em vez de excluído.',
+                'caminhao' => $caminhao->fresh('motorista'),
+            ]);
         }
 
         $caminhao->delete();
+        Auditoria::registrar('caminhao.excluir', $caminhao);
 
         return response()->json(['message' => 'Caminhão excluído.']);
     }
 
-    // Regras de validação, iguais para cadastrar e para alterar.
     private function validar(Request $request, ?Caminhao $caminhao = null): array
     {
-        // Padroniza a placa: maiúsculas e sem traço ou espaço (ABC-1D23 vira ABC1D23).
         if ($request->filled('placa')) {
             $request->merge([
                 'placa' => strtoupper(str_replace(['-', ' '], '', $request->input('placa'))),
@@ -72,20 +116,20 @@ class CaminhaoController extends Controller
                 'required', 'string', 'max:8',
                 Rule::unique('caminhoes', 'placa')->ignore($caminhao?->id),
             ],
-            'modelo'            => ['required', 'string', 'max:255'],
-            'ano'               => ['required', 'integer', 'between:1980,' . (date('Y') + 1)],
+            'modelo' => ['required', 'string', 'max:255'],
+            'ano' => ['required', 'integer', 'between:1980,'.(date('Y') + 1)],
             'capacidade_tanque' => ['required', 'numeric', 'min:1', 'max:99999'],
-            'km_atual'          => ['required', 'integer', 'min:0'],
-            'status'            => ['required', Rule::in(['ativo', 'manutencao', 'inativo'])],
-            'motorista_id'      => [
+            'km_atual' => ['required', 'integer', 'min:0'],
+            'status' => ['required', Rule::in(['ativo', 'manutencao', 'inativo'])],
+            'motorista_id' => [
                 'nullable', 'integer', 'exists:motoristas,id',
                 Rule::unique('caminhoes', 'motorista_id')->ignore($caminhao?->id),
             ],
         ], [
-            'placa.unique'        => 'Já existe um caminhão com esta placa.',
+            'placa.unique' => 'Já existe um caminhão com esta placa.',
             'motorista_id.unique' => 'Este motorista já é responsável por outro caminhão.',
             'motorista_id.exists' => 'Motorista não encontrado.',
-            'required'            => 'Preencha o campo :attribute.',
+            'required' => 'Preencha o campo :attribute.',
         ]);
     }
 }

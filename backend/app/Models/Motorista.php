@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\WhatsApp;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Motorista extends Model
 {
@@ -14,10 +16,20 @@ class Motorista extends Model
 
     protected $casts = ['ativo' => 'boolean'];
 
-    // Um motorista é responsável por um caminhão.
-    // A chave estrangeira (motorista_id) está na tabela caminhoes.
+    protected $appends = ['whatsapp_url'];
+
     public function caminhao(): HasOne
     {
         return $this->hasOne(Caminhao::class);
+    }
+
+    public function abastecimentos(): HasMany
+    {
+        return $this->hasMany(Abastecimento::class);
+    }
+
+    public function getWhatsappUrlAttribute(): ?string
+    {
+        return WhatsApp::link($this->telefone);
     }
 }

@@ -16,10 +16,14 @@ class DadosTesteSeeder extends Seeder
 {
     public function run(): void
     {
+        if (Motorista::query()->exists()) {
+            return;
+        }
+
         // 1) Motoristas
         $motoristas = collect([
-            ['nome' => 'Carlos Silva',    'cpf' => '111.111.111-11', 'cnh' => '12345678901', 'telefone' => '(44) 99999-0001'],
-            ['nome' => 'João Pereira',    'cpf' => '222.222.222-22', 'cnh' => '12345678902', 'telefone' => '(44) 99999-0002'],
+            ['nome' => 'João Santos',     'cpf' => '111.111.111-11', 'cnh' => '12345678901', 'telefone' => '(44) 99999-0001'],
+            ['nome' => 'Carlos Silva',    'cpf' => '222.222.222-22', 'cnh' => '12345678902', 'telefone' => '(44) 99999-0002'],
             ['nome' => 'Marcos Oliveira', 'cpf' => '333.333.333-33', 'cnh' => '12345678903', 'telefone' => '(44) 99999-0003'],
             ['nome' => 'Rafael Santos',   'cpf' => '444.444.444-44', 'cnh' => '12345678904', 'telefone' => '(44) 99999-0004'],
             ['nome' => 'André Costa',     'cpf' => '555.555.555-55', 'cnh' => '12345678905', 'telefone' => '(44) 99999-0005'],

@@ -5,123 +5,131 @@ namespace App\Http\Controllers;
 use App\Models\Abastecimento;
 use App\Models\Caminhao;
 use App\Models\Tanque;
+use App\Services\AbastecimentoService;
+use App\Support\Consumo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 
 class AbastecimentoController extends Controller
 {
-    // Dados de outras tabelas que acompanham cada abastecimento na resposta.
-    private const RELACOES = ['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'];
-
-    // GET /api/abastecimentos — os 100 mais recentes.
-    public function index(): JsonResponse
-    {
-        $abastecimentos = Abastecimento::with(self::RELACOES)
-            ->orderByDesc('data')
-            ->orderByDesc('id')
-            ->limit(100)
-            ->get();
-
-        return response()->json($abastecimentos);
-    }
-
-    // POST /api/abastecimentos — registra a saída de combustível do tanque para um caminhão.
-    public function store(Request $request): JsonResponse
+    public function limites(Request $request): JsonResponse
     {
         $dados = $request->validate([
             'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
-            'tanque_id'   => ['required', 'integer', 'exists:tanques,id'],
-            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
-            'litros'      => ['required', 'numeric', 'min:1', 'max:99999'],
-            'km'          => ['required', 'integer', 'min:0'],
-        ], [
-            'required'                  => 'Preencha o campo :attribute.',
-            'data.date_format'          => 'Data inválida.',
-            'data.before_or_equal'      => 'A data não pode ser futura.',
-            'litros.min'                => 'Informe pelo menos 1 litro.',
-            'caminhao_id.exists'        => 'Caminhão não encontrado.',
-            'tanque_id.exists'          => 'Tanque não encontrado.',
-        ], [
-            'caminhao_id' => 'caminhão',
-            'tanque_id'   => 'tanque',
-            'litros'      => 'litros',
-            'km'          => 'quilometragem',
-            'data'        => 'data',
+            'tanque_id' => ['nullable', 'integer', 'exists:tanques,id'],
         ]);
 
-        // Tudo ou nada: se qualquer passo falhar, nenhuma alteração é salva.
-        $abastecimento = DB::transaction(function () use ($dados) {
-            // lockForUpdate trava as linhas até o fim da transaction. Assim, dois abastecimentos
-            // simultâneos não conseguem "gastar" o mesmo combustível duas vezes.
-            $caminhao = Caminhao::lockForUpdate()->findOrFail($dados['caminhao_id']);
-            $tanque   = Tanque::lockForUpdate()->findOrFail($dados['tanque_id']);
+        $caminhao = Caminhao::findOrFail($dados['caminhao_id']);
+        $this->authorize('abastecer', $caminhao);
 
-            $litros = (float) $dados['litros'];
-            $km     = (int) $dados['km'];
+        $tanque = isset($dados['tanque_id']) ? Tanque::find($dados['tanque_id']) : null;
 
-            if ($caminhao->status !== 'ativo') {
-                throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não está ativo.']);
-            }
-
-            if (! $caminhao->motorista_id) {
-                throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não tem motorista responsável.']);
-            }
-
-            if ($litros > (float) $caminhao->capacidade_tanque) {
-                throw ValidationException::withMessages([
-                    'litros' => 'O tanque do caminhão comporta no máximo ' . (float) $caminhao->capacidade_tanque . ' L.',
-                ]);
-            }
-
-            if ($litros > (float) $tanque->nivel_atual) {
-                throw ValidationException::withMessages([
-                    'litros' => 'O ' . $tanque->nome . ' tem apenas ' . (float) $tanque->nivel_atual . ' L.',
-                ]);
-            }
-
-            if ($km < $caminhao->km_atual) {
-                throw ValidationException::withMessages([
-                    'km' => 'A quilometragem não pode ser menor que a atual (' . $caminhao->km_atual . ' km).',
-                ]);
-            }
-
-            $abastecimento = Abastecimento::create([
-                'caminhao_id'  => $caminhao->id,
-                'motorista_id' => $caminhao->motorista_id, // o responsável do caminhão no momento
-                'tanque_id'    => $tanque->id,
-                'data'         => $dados['data'],
-                'litros'       => $litros,
-                'km'           => $km,
-            ]);
-
-            $tanque->decrement('nivel_atual', $litros);   // sai do tanque
-            $caminhao->update(['km_atual' => $km]);       // o caminhão anda até ali
-
-            return $abastecimento;
-        });
-
-        return response()->json($abastecimento->load(self::RELACOES), 201);
+        return response()->json([
+            'caminhao' => $caminhao->only(['id', 'placa', 'km_atual', 'capacidade_tanque', 'status']),
+            'tanque' => $tanque ? [
+                'id' => $tanque->id,
+                'nome' => $tanque->nome,
+                'nivel_atual' => (float) $tanque->nivel_atual,
+                'tipo_combustivel' => $tanque->tipo_combustivel,
+            ] : null,
+            'max_litros_base' => $tanque ? (float) $tanque->nivel_atual : 0,
+        ]);
     }
 
-    // DELETE /api/abastecimentos/{id} — corrige um lançamento errado, devolvendo os litros ao tanque.
-    // A quilometragem do caminhão não volta atrás; se precisar, ajuste na tela de Caminhões.
+    public function store(Request $request, AbastecimentoService $service): JsonResponse
+    {
+        $dados = $request->validate([
+            'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
+            'origem' => ['required', Rule::in(['base', 'externo'])],
+            'tanque_id' => ['nullable', 'integer', 'exists:tanques,id'],
+            'posto' => ['nullable', 'string', 'max:255'],
+            'data' => ['nullable', 'date', 'before_or_equal:today'],
+            'litros' => ['required', 'numeric', 'min:0.01', 'max:2000'],
+            'km' => ['required', 'integer', 'min:0'],
+            'comprovante' => ['nullable', 'image', 'max:5120'],
+        ]);
+
+        $caminhao = Caminhao::findOrFail($dados['caminhao_id']);
+        $this->authorize('abastecer', $caminhao);
+
+        $abastecimento = $service->registrar($request->user(), $dados, $request->file('comprovante'));
+
+        return response()->json($abastecimento, 201);
+    }
+
+    public function doCaminhao(Request $request, Caminhao $caminhao): JsonResponse
+    {
+        $this->authorize('view', $caminhao);
+
+        $lista = $caminhao->abastecimentos()
+            ->with(['tanque:id,nome', 'motorista:id,nome'])
+            ->orderByDesc('data')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
+        $trechos = Consumo::trechos(
+            $caminhao->abastecimentos()->orderBy('km')->orderBy('data')->orderBy('id')->get()
+        )->keyBy('abastecimento_id');
+
+        $lista->transform(function ($item) use ($trechos) {
+            $item->setAttribute('km_l', $trechos[$item->id]['km_l'] ?? null);
+
+            return $item;
+        });
+
+        return response()->json($lista);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $usuario = $request->user();
+        $query = Abastecimento::with([
+            'caminhao:id,placa,modelo',
+            'motorista:id,nome,telefone',
+            'tanque:id,nome,tipo_combustivel',
+        ])->orderByDesc('data')->orderByDesc('id');
+
+        if ($usuario->isMotorista()) {
+            $query->where('motorista_id', $usuario->motorista_id);
+        }
+        if ($origem = $request->string('origem')->toString()) {
+            $query->where('origem', $origem);
+        }
+        if ($caminhaoId = $request->integer('caminhao_id')) {
+            $query->where('caminhao_id', $caminhaoId);
+        }
+        if ($de = $request->string('de')->toString()) {
+            $query->whereDate('data', '>=', $de);
+        }
+        if ($ate = $request->string('ate')->toString()) {
+            $query->whereDate('data', '<=', $ate);
+        }
+
+        return response()->json($query->limit(200)->get());
+    }
+
+    /**
+     * Exclui lançamento incorreto. Se veio da base, devolve litros ao tanque
+     * (sem ultrapassar a capacidade). Abastecimento externo só remove o registro.
+     */
     public function destroy(Abastecimento $abastecimento): JsonResponse
     {
         DB::transaction(function () use ($abastecimento) {
-            $tanque = Tanque::lockForUpdate()->findOrFail($abastecimento->tanque_id);
+            if ($abastecimento->tanque_id) {
+                $tanque = Tanque::lockForUpdate()->findOrFail($abastecimento->tanque_id);
+                $novoNivel = min(
+                    (float) $tanque->capacidade,
+                    (float) $tanque->nivel_atual + (float) $abastecimento->litros
+                );
+                $tanque->update(['nivel_atual' => $novoNivel]);
+            }
 
-            // Nunca passa da capacidade do tanque (ele pode ter sido reabastecido depois).
-            $novoNivel = min(
-                (float) $tanque->capacidade,
-                (float) $tanque->nivel_atual + (float) $abastecimento->litros
-            );
-
-            $tanque->update(['nivel_atual' => $novoNivel]);
             $abastecimento->delete();
         });
 
-        return response()->json(['message' => 'Abastecimento excluído e litros devolvidos ao tanque.']);
+        return response()->json(['message' => 'Abastecimento excluído e litros devolvidos ao tanque, quando aplicável.']);
     }
 }

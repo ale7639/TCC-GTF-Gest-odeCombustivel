@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Consumo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,15 +19,19 @@ class Caminhao extends Model
         'km_atual', 'status', 'motorista_id',
     ];
 
-    protected $casts = ['capacidade_tanque' => 'decimal:2'];
+    protected $casts = [
+        'capacidade_tanque' => 'decimal:2',
+        'km_atual' => 'integer',
+        'ano' => 'integer',
+    ];
 
-    // O caminhão pertence a um motorista (a coluna motorista_id está nele).
+    protected $appends = ['media_km_l'];
+
     public function motorista(): BelongsTo
     {
         return $this->belongsTo(Motorista::class);
     }
 
-    // Um caminhão tem muitos abastecimentos, lavagens e manutenções.
     public function abastecimentos(): HasMany
     {
         return $this->hasMany(Abastecimento::class);
@@ -40,5 +45,10 @@ class Caminhao extends Model
     public function manutencoes(): HasMany
     {
         return $this->hasMany(Manutencao::class);
+    }
+
+    public function getMediaKmLAttribute(): ?float
+    {
+        return Consumo::mediaCaminhao($this);
     }
 }
