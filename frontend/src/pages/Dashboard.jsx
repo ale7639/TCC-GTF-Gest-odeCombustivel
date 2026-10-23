@@ -16,36 +16,18 @@ export default function Dashboard() {
   if (error) return <div className="scroll"><div className="banner banner-danger">{error}</div></div>
   if (!data) return <div className="scroll"><p className="muted">Carregando…</p></div>
 
-  const alertas = data.alertas || []
-
   return (
     <div className="scroll stack">
       <div>
         <p className="eyebrow">Hoje no pátio</p>
         <h1>Olá, {firstName(user?.name)}</h1>
       </div>
-      {alertas.length > 0 && (
-        <div className="stack" style={{ gap: 8 }}>
-          {alertas.slice(0, 6).map((a, i) => (
-            <Link
-              key={`${a.tipo}-${i}`}
-              to={a.link || '/app'}
-              className={`banner ${a.nivel === 'vencido' ? 'banner-danger' : 'banner-warn'}`}
-              style={{ textDecoration: 'none', display: 'block' }}
-            >
-              <strong>{a.titulo}</strong>
-              <div style={{ marginTop: 4 }}>{a.texto}</div>
-            </Link>
-          ))}
-        </div>
-      )}
       {data.tanques.map((tanque) => (
         <Link key={tanque.id} to={`/app/tanques/${tanque.id}`} className={`tank ${tanque.alerta ? 'critical' : ''}`} style={{ textDecoration: 'none' }}>
           <p className="eyebrow" style={{ color: 'rgba(255,255,255,.7)' }}>{tanque.nome} · {tanque.tipo_combustivel}</p>
           <div className="num">{liters(tanque.nivel_atual)}</div>
           <p style={{ margin: '6px 0 0', opacity: .8 }}>{tanque.percentual}% da capacidade</p>
           <div className="progress"><span style={{ width: `${Math.min(100, tanque.percentual)}%` }} /></div>
-          {tanque.alerta && <p style={{ margin: '12px 0 0', fontWeight: 700 }}>Nível crítico — registre uma entrada.</p>}
         </Link>
       ))}
       <div className="kpi">

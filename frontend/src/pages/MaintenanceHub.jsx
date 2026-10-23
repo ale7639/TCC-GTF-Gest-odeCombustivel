@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import EmptyState from '../components/EmptyState'
-import { useAuth } from '../context/AuthContext'
 import { apiMessage, dateBr, km, oleoBadge, oleoLabel } from '../utils/format'
 
 export default function MaintenanceHub() {
-  const { isGestao } = useAuth()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -37,12 +35,6 @@ export default function MaintenanceHub() {
         <div className="kpi-card"><div className="num">{resumo.os_abertas ?? 0}</div><span>OS abertas</span></div>
         <div className="kpi-card"><div className="num">{caminhoes.length}</div><span>Na frota</span></div>
       </div>
-
-      {!isGestao && (
-        <div className="banner banner-warn">
-          Você consulta o status do seu caminhão. Só gestão agenda ou conclui manutenção.
-        </div>
-      )}
 
       {caminhoes.length === 0 ? (
         <EmptyState icon="🔧" title="Nada na frota" text="Cadastre caminhões para acompanhar manutenção." />

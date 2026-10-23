@@ -14,6 +14,10 @@ export function AuthProvider({ children }) {
     return {
       user,
       token,
+      setUser(next) {
+        localStorage.setItem('gfc_user', JSON.stringify(next))
+        setUser(next)
+      },
       isAdmin: role === 'administrador',
       isGestao: role === 'administrador' || role === 'supervisor',
       isMotorista: role === 'motorista',

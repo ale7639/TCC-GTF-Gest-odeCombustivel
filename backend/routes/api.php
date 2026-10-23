@@ -10,6 +10,7 @@ use App\Http\Controllers\LavagemController;
 use App\Http\Controllers\ManutencaoController;
 use App\Http\Controllers\MotoristaController;
 use App\Http\Controllers\MultaController;
+use App\Http\Controllers\NotificacaoController;
 use App\Http\Controllers\PneuController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\TanqueController;
@@ -21,7 +22,14 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me', [AuthController::class, 'atualizarPerfil']);
+    Route::put('/me/senha', [AuthController::class, 'alterarSenha']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    Route::get('/notificacoes', [NotificacaoController::class, 'index']);
+    Route::get('/notificacoes/resumo', [NotificacaoController::class, 'resumo']);
+    Route::post('/notificacoes/ler', [NotificacaoController::class, 'marcarLida']);
+    Route::post('/notificacoes/ler-todas', [NotificacaoController::class, 'marcarTodas']);
 
     Route::get('/caminhoes', [CaminhaoController::class, 'index']);
     Route::get('/caminhoes/{caminhao}', [CaminhaoController::class, 'show']);

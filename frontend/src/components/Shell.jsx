@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { firstName, roleLabel } from '../utils/format'
 
@@ -22,11 +23,16 @@ const Icon = {
   tank: (
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v2H7V4Zm-1 3h12a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a2 2 0 0 1 2-2Zm2 3v8h8v-2.5c-1.2 0-2-.8-2-2s.8-2 2-2V10H8Z" fill="currentColor" /></svg>
   ),
+  bell: (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v2.2c0 .7-.2 1.3-.6 1.9L4.2 15.4A1 1 0 0 0 5 17h14a1 1 0 0 0 .8-1.6l-1.2-2.3c-.4-.6-.6-1.2-.6-1.9V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 21Z" fill="currentColor" /></svg>
+  ),
 }
 
 function menuItems({ isGestao, isAdmin }) {
   const base = [
     { to: '/app', label: 'Início', end: true },
+    { to: '/app/perfil', label: 'Meu perfil' },
+    { to: '/app/notificacoes', label: 'Notificações' },
     { to: '/app/frota', label: 'Frota' },
     { to: '/app/abastecer', label: 'Abastecer' },
     { to: '/app/manutencao', label: 'Manutenção' },
@@ -64,9 +70,31 @@ function quickItems({ isGestao }) {
 export default function Shell() {
   const { user, isAdmin, isGestao, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const [naoLidas, setNaoLidas] = useState(0)
   const navigate = useNavigate()
+  const location = useLocation()
   const drawer = menuItems({ isGestao, isAdmin })
   const quick = quickItems({ isGestao })
+
+  const atualizarBadge = useCallback(() => {
+    api.get('/notificacoes/resumo')
+      .then(({ data }) => setNaoLidas(data.nao_lidas || 0))
+      .catch(() => { /* silencioso */ })
+  }, [])
+
+  useEffect(() => {
+    atualizarBadge()
+    const onFocus = () => atualizarBadge()
+    const onCustom = () => atualizarBadge()
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('gfc:notificacoes', onCustom)
+    const timer = setInterval(atualizarBadge, 60000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('gfc:notificacoes', onCustom)
+      clearInterval(timer)
+    }
+  }, [atualizarBadge, location.pathname])
 
   async function sair() {
     setOpen(false)
@@ -87,6 +115,17 @@ export default function Shell() {
             <small>{firstName(user?.name)} · {roleLabel(user?.role)}</small>
           </div>
         </div>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={naoLidas > 0 ? `Notificações, ${naoLidas} não lidas` : 'Notificações'}
+          onClick={() => navigate('/app/notificacoes')}
+        >
+          {Icon.bell}
+          {naoLidas > 0 && (
+            <span className="notif-badge">{naoLidas > 9 ? '9+' : naoLidas}</span>
+          )}
+        </button>
       </header>
 
       <Outlet />
@@ -108,6 +147,9 @@ export default function Shell() {
             {drawer.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setOpen(false)}>
                 {item.label}
+                {item.to === '/app/notificacoes' && naoLidas > 0 && (
+                  <span className="drawer-badge">{naoLidas > 9 ? '9+' : naoLidas}</span>
+                )}
               </NavLink>
             ))}
             <button type="button" className="navlink out" onClick={sair}>Sair</button>

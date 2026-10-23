@@ -19,6 +19,8 @@ import MaintenanceHub from './pages/MaintenanceHub'
 import PreTrip from './pages/PreTrip'
 import Tires from './pages/Tires'
 import Fines from './pages/Fines'
+import Profile from './pages/Profile'
+import Notifications from './pages/Notifications'
 
 function Private({ children }) {
   const { token } = useAuth()
@@ -42,6 +44,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/app" element={<Private><Shell /></Private>}>
           <Route index element={<Dashboard />} />
+          <Route path="perfil" element={<Profile />} />
+          <Route path="notificacoes" element={<Notifications />} />
           <Route path="frota" element={<Fleet />} />
           <Route path="frota/novo" element={<Admin><TruckForm /></Admin>} />
           <Route path="frota/:id" element={<TruckDetails />} />

@@ -21,6 +21,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'telefone',
         'password',
         'role',
         'is_active',
@@ -68,6 +69,7 @@ class User extends Authenticatable
             'name' => $this->name,
             'nome' => $this->name,
             'email' => $this->email,
+            'telefone' => $this->telefone,
             'role' => $this->role,
             'is_active' => (bool) $this->is_active,
             'motorista_id' => $this->motorista_id,
