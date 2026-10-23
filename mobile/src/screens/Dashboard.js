@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { API_URL } from '../config';
+import { useFocusEffect } from '@react-navigation/native';
+import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 
 // Funções de formatação: 15000 -> "15.000" | 6350 -> "R$ 6.350,00" | "2026-10-16" -> "16/10/2026"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -28,32 +31,28 @@ function Cartao({ titulo, valor }) {
 }
 
 export default function Dashboard() {
+  const { sair } = useAuth();
   const [dados, setDados] = useState(null);              // resposta da API
   const [erro, setErro] = useState(null);                // mensagem de erro, se houver
   const [atualizando, setAtualizando] = useState(false); // controla o "puxar para atualizar"
 
   const carregar = useCallback(async () => {
-    // Se o servidor não responder em 8 segundos, cancela e mostra o erro.
-    const controle = new AbortController();
-    const timer = setTimeout(() => controle.abort(), 8000);
-
     try {
       setErro(null);
-      const resposta = await fetch(`${API_URL}/dashboard`, { signal: controle.signal });
-      if (!resposta.ok) throw new Error(`Erro ${resposta.status}`);
-      setDados(await resposta.json());
+      setDados(await api('/dashboard')); // o token é enviado automaticamente pelo api()
     } catch (e) {
       setErro('Não foi possível carregar os dados. Verifique se o servidor está ligado.');
     } finally {
-      clearTimeout(timer);
       setAtualizando(false);
     }
   }, []);
 
-  // Carrega os dados uma vez, quando a tela abre.
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  // Recarrega os dados toda vez que a aba é aberta (assim reflete cadastros feitos em outras telas).
+  useFocusEffect(
+    useCallback(() => {
+      carregar();
+    }, [carregar])
+  );
 
   return (
     <ScrollView
@@ -69,7 +68,12 @@ export default function Dashboard() {
         />
       }
     >
-      <Text style={styles.titulo}>Painel da Frota</Text>
+      <View style={styles.cabecalho}>
+        <Text style={styles.titulo}>Painel da Frota</Text>
+        <Pressable onPress={sair}>
+          <Text style={styles.sair}>Sair</Text>
+        </Pressable>
+      </View>
 
       {erro && <Text style={styles.erro}>{erro}</Text>}
       {!dados && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
@@ -133,7 +137,14 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: '#f3f4f6' },
   conteudo: { padding: 16, paddingTop: 56, paddingBottom: 40 },
-  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 16, color: '#111827' },
+  cabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  sair: { fontSize: 16, fontWeight: '600', color: '#2563eb' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: {
