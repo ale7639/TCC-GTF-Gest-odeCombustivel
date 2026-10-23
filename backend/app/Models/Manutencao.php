@@ -14,12 +14,16 @@ class Manutencao extends Model
 
     protected $fillable = [
         'caminhao_id', 'motorista_id', 'nota_fiscal_id',
-        'data', 'tipo', 'descricao', 'valor', 'km',
+        'data', 'data_prevista', 'data_realizada', 'status',
+        'tipo', 'oficina', 'descricao', 'checklist', 'valor', 'km',
     ];
 
     protected $casts = [
-        'data'  => 'date',
+        'data' => 'date',
+        'data_prevista' => 'date',
+        'data_realizada' => 'date',
         'valor' => 'decimal:2',
+        'checklist' => 'array',
     ];
 
     public function caminhao(): BelongsTo

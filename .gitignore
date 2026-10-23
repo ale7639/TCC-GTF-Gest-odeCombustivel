@@ -1,0 +1,11 @@
+/backend/.env
+/backend/vendor
+/backend/node_modules
+/backend/public/hot
+/backend/public/storage
+/backend/storage/*.key
+/frontend/node_modules
+/frontend/dist
+/mobile/node_modules
+.DS_Store
+*.log
