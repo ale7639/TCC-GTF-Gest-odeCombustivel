@@ -45,6 +45,10 @@ class DadosTesteSeeder extends Seeder
             'km_atual'          => $c[4],
             'status'            => $c[5],
             'motorista_id'      => $motoristas->get($i)?->id, // null para o 6º caminhão
+            'oleo_intervalo_km' => 10000,
+            'oleo_ultima_km'    => $i < 5 ? $c[4] - [12000, 800, 4500, 11000, 2000][$i] : null,
+            'oleo_ultima_data'  => $i < 5 ? now()->subDays([90, 20, 45, 100, 30][$i])->toDateString() : null,
+            'oleo_proxima_data' => $i < 5 ? now()->addDays([20, 5, 40, -10, 25][$i])->toDateString() : null,
         ]));
 
         // 3) Tanques da empresa (o nível já é definido aqui; o segundo está baixo de propósito,
@@ -107,16 +111,35 @@ class DadosTesteSeeder extends Seeder
             ]);
         }
 
-        // 7) Manutenções
+        // 7) Manutenções (histórico + uma agendada)
         foreach ([[0, 'Troca de óleo', 850], [1, 'Troca de pneus', 4200], [2, 'Revisão de freios', 1300]] as [$i, $tipo, $valor]) {
+            $data = now()->subDays(rand(1, 30))->toDateString();
             Manutencao::create([
-                'caminhao_id'  => $caminhoes[$i]->id,
-                'motorista_id' => $caminhoes[$i]->motorista_id,
-                'data'         => now()->subDays(rand(1, 30)),
-                'tipo'         => $tipo,
-                'valor'        => $valor,
-                'km'           => $caminhoes[$i]->km_atual - rand(100, 3000),
+                'caminhao_id'    => $caminhoes[$i]->id,
+                'motorista_id'   => $caminhoes[$i]->motorista_id,
+                'data'           => $data,
+                'data_prevista'  => $data,
+                'data_realizada' => $data,
+                'status'         => 'concluida',
+                'tipo'           => $tipo,
+                'descricao'      => $tipo.' realizada na oficina parceira.',
+                'checklist'      => ['Filtros conferidos', 'Nível de fluidos ok', 'Teste de estrada'],
+                'valor'          => $valor,
+                'km'             => $caminhoes[$i]->km_atual - rand(100, 3000),
             ]);
         }
+
+        Manutencao::create([
+            'caminhao_id'   => $caminhoes[0]->id,
+            'motorista_id'  => $caminhoes[0]->motorista_id,
+            'data'          => now()->addDays(3)->toDateString(),
+            'data_prevista' => now()->addDays(3)->toDateString(),
+            'status'        => 'agendada',
+            'tipo'          => 'Revisão preventiva',
+            'descricao'     => 'Revisão de suspensão e alinhamento antes da viagem longa.',
+            'checklist'     => ['Suspensão', 'Alinhamento', 'Pneus'],
+            'valor'         => 0,
+            'km'            => $caminhoes[0]->km_atual,
+        ]);
     }
 }

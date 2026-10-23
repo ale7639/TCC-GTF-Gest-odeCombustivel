@@ -50,3 +50,19 @@ export function statusBadge(status) {
   if (status === 'manutencao') return 'badge-pendente'
   return 'badge-nao_apto'
 }
+
+export function oleoLabel(alerta) {
+  return {
+    ok: 'Em dia',
+    proximo: 'Próximo',
+    atrasado: 'Atrasado',
+    sem_registro: 'Sem registro',
+  }[alerta] || alerta || '—'
+}
+
+export function oleoBadge(alerta) {
+  if (alerta === 'ok') return 'badge-ok'
+  if (alerta === 'proximo') return 'badge-pendente'
+  if (alerta === 'atrasado') return 'badge-nao_apto'
+  return 'badge-pendente'
+}

@@ -180,6 +180,46 @@ class GfcRegrasTest extends TestCase
         $this->assertDatabaseHas('notas_fiscais', ['numero' => 'NF-9001']);
     }
 
+    public function test_manutencao_agendada_e_troca_de_oleo(): void
+    {
+        $frota = $this->frota();
+        $admin = $this->usuario('administrador');
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$frota['caminhao']->id.'/manutencoes', [
+            'status' => 'agendada',
+            'data_prevista' => now()->addDays(2)->toDateString(),
+            'tipo' => 'Revisão preventiva',
+            'descricao' => 'Ruído na suspensão dianteira.',
+            'valor' => 0,
+            'km' => 100000,
+            'checklist' => ['Suspensão', 'Pneus'],
+            'marcar_caminhao_manutencao' => true,
+        ])->assertCreated()->assertJsonPath('manutencao.status', 'agendada');
+
+        $this->assertSame('manutencao', $frota['caminhao']->fresh()->status);
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$frota['caminhao']->id.'/manutencoes', [
+            'status' => 'concluida',
+            'data_prevista' => now()->toDateString(),
+            'data_realizada' => now()->toDateString(),
+            'tipo' => 'Troca de óleo',
+            'descricao' => 'Troca de óleo S15 15W40 e filtro.',
+            'valor' => 850,
+            'km' => 100200,
+            'checklist' => ['Óleo e filtros'],
+            'oleo_intervalo_km' => 10000,
+        ])->assertCreated();
+
+        $caminhao = $frota['caminhao']->fresh();
+        $this->assertSame(100200, (int) $caminhao->oleo_ultima_km);
+        $this->assertSame(10000, (int) $caminhao->oleo_intervalo_km);
+        $this->assertSame('ok', $caminhao->oleo['alerta']);
+        $this->assertSame(110200, $caminhao->oleo['proxima_km']);
+
+        $hub = $this->actingAs($admin, 'sanctum')->getJson('/api/manutencao')->assertOk()->json();
+        $this->assertNotEmpty($hub['caminhoes']);
+    }
+
     public function test_media_km_l_aparece_no_caminhao(): void
     {
         Storage::fake('public');

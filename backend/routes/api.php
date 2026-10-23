@@ -24,6 +24,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/caminhoes/{caminhao}/abastecimentos', [AbastecimentoController::class, 'doCaminhao']);
     Route::get('/caminhoes/{caminhao}/lavagens', [LavagemController::class, 'index']);
     Route::post('/caminhoes/{caminhao}/lavagens', [LavagemController::class, 'store']);
+    Route::get('/manutencao', [ManutencaoController::class, 'hub']);
     Route::get('/caminhoes/{caminhao}/manutencoes', [ManutencaoController::class, 'index']);
 
     Route::get('/abastecimentos', [AbastecimentoController::class, 'index']);
@@ -60,6 +61,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::delete('/abastecimentos/{abastecimento}', [AbastecimentoController::class, 'destroy']);
 
         Route::post('/caminhoes/{caminhao}/manutencoes', [ManutencaoController::class, 'store']);
+        Route::post('/caminhoes/{caminhao}/manutencoes/{manutencao}/concluir', [ManutencaoController::class, 'concluir']);
 
         Route::get('/relatorios/consumo', [RelatorioController::class, 'consumo']);
         Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);

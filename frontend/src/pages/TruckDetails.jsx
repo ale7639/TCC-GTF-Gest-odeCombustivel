@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
 import { useAuth } from '../context/AuthContext'
-import { apiMessage, dateBr, km, kmPerLiter, liters, statusBadge, statusLabel } from '../utils/format'
+import { apiMessage, dateBr, km, kmPerLiter, liters, oleoBadge, oleoLabel, statusBadge, statusLabel } from '../utils/format'
 
 export default function TruckDetails() {
   const { id } = useParams()
@@ -47,6 +47,20 @@ export default function TruckDetails() {
         <div><span>Tanque</span><strong>{liters(c.capacidade_tanque)}</strong></div>
         <div><span>Motorista</span><strong>{c.motorista?.nome || '—'}</strong></div>
       </div>
+      {c.oleo && (
+        <Link className={`card oleo-card alerta-${c.oleo.alerta}`} to={`/app/frota/${id}/manutencao`} style={{ textDecoration: 'none' }}>
+          <div className="row space">
+            <div>
+              <p className="eyebrow">Óleo</p>
+              <strong>{c.oleo.rotulo}</strong>
+            </div>
+            <span className={`badge ${oleoBadge(c.oleo.alerta)}`}>{oleoLabel(c.oleo.alerta)}</span>
+          </div>
+          <p className="muted" style={{ margin: '8px 0 0' }}>
+            Última {dateBr(c.oleo.ultima_data)} · próxima {c.oleo.proxima_km != null ? km(c.oleo.proxima_km) : '—'}
+          </p>
+        </Link>
+      )}
       <div className="row" style={{ flexWrap: 'wrap' }}>
         {wa && <a className="btn btn-wa" href={wa} target="_blank" rel="noreferrer">WhatsApp</a>}
         {isAdmin && <Link className="btn btn-soft" style={{ width: 'auto' }} to={`/app/frota/${id}/editar`}>Editar</Link>}
