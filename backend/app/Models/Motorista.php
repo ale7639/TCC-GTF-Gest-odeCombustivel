@@ -12,9 +12,17 @@ class Motorista extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['nome', 'cpf', 'cnh', 'telefone', 'ativo'];
+    protected $fillable = [
+        'nome', 'cpf', 'cnh', 'cnh_validade', 'telefone',
+        'limite_litros_dia', 'credito_litros_mes', 'ativo',
+    ];
 
-    protected $casts = ['ativo' => 'boolean'];
+    protected $casts = [
+        'ativo' => 'boolean',
+        'cnh_validade' => 'date',
+        'limite_litros_dia' => 'decimal:2',
+        'credito_litros_mes' => 'decimal:2',
+    ];
 
     protected $appends = ['whatsapp_url'];
 

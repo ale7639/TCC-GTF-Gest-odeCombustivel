@@ -19,7 +19,8 @@ class Caminhao extends Model
         'placa', 'modelo', 'ano', 'capacidade_tanque',
         'km_atual', 'oleo_ultima_data', 'oleo_ultima_km',
         'oleo_intervalo_km', 'oleo_proxima_data',
-        'status', 'motorista_id',
+        'status', 'crlv_validade', 'seguro_validade', 'meta_km_l',
+        'motorista_id',
     ];
 
     protected $casts = [
@@ -30,6 +31,9 @@ class Caminhao extends Model
         'oleo_proxima_data' => 'date',
         'oleo_ultima_km' => 'integer',
         'oleo_intervalo_km' => 'integer',
+        'crlv_validade' => 'date',
+        'seguro_validade' => 'date',
+        'meta_km_l' => 'decimal:2',
     ];
 
     protected $appends = ['media_km_l', 'oleo'];
@@ -52,6 +56,21 @@ class Caminhao extends Model
     public function manutencoes(): HasMany
     {
         return $this->hasMany(Manutencao::class);
+    }
+
+    public function pneus(): HasMany
+    {
+        return $this->hasMany(Pneu::class);
+    }
+
+    public function checklistsPreViagem(): HasMany
+    {
+        return $this->hasMany(ChecklistPreViagem::class);
+    }
+
+    public function multas(): HasMany
+    {
+        return $this->hasMany(Multa::class);
     }
 
     public function getMediaKmLAttribute(): ?float

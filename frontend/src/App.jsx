@@ -16,6 +16,9 @@ import Users from './pages/Users'
 import Wash from './pages/Wash'
 import Maintenance from './pages/Maintenance'
 import MaintenanceHub from './pages/MaintenanceHub'
+import PreTrip from './pages/PreTrip'
+import Tires from './pages/Tires'
+import Fines from './pages/Fines'
 
 function Private({ children }) {
   const { token } = useAuth()
@@ -45,8 +48,11 @@ export default function App() {
           <Route path="frota/:id/editar" element={<Admin><TruckForm /></Admin>} />
           <Route path="frota/:id/lavagem" element={<Wash />} />
           <Route path="frota/:id/manutencao" element={<Maintenance />} />
+          <Route path="frota/:id/pneus" element={<Tires />} />
           <Route path="manutencao" element={<MaintenanceHub />} />
+          <Route path="saida" element={<PreTrip />} />
           <Route path="motoristas" element={<Gestao><Drivers /></Gestao>} />
+          <Route path="multas" element={<Gestao><Fines /></Gestao>} />
           <Route path="tanques" element={<Tanks />} />
           <Route path="tanques/:id" element={<TankDetails />} />
           <Route path="abastecer" element={<Fueling />} />

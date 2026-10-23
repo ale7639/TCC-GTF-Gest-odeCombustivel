@@ -19,12 +19,28 @@ class AbastecimentoController extends Controller
         $dados = $request->validate([
             'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
             'tanque_id' => ['nullable', 'integer', 'exists:tanques,id'],
+            'data' => ['nullable', 'date'],
         ]);
 
-        $caminhao = Caminhao::findOrFail($dados['caminhao_id']);
+        $caminhao = Caminhao::with('motorista')->findOrFail($dados['caminhao_id']);
         $this->authorize('abastecer', $caminhao);
 
         $tanque = isset($dados['tanque_id']) ? Tanque::find($dados['tanque_id']) : null;
+        $data = $dados['data'] ?? now()->toDateString();
+        $motorista = $caminhao->motorista;
+        $usadoDia = 0.0;
+        $usadoMes = 0.0;
+        if ($motorista) {
+            $usadoDia = (float) Abastecimento::where('motorista_id', $motorista->id)
+                ->where('origem', 'base')->whereDate('data', $data)->sum('litros');
+            $inicio = date('Y-m-01', strtotime($data));
+            $fim = date('Y-m-t', strtotime($data));
+            $usadoMes = (float) Abastecimento::where('motorista_id', $motorista->id)
+                ->where('origem', 'base')
+                ->whereDate('data', '>=', $inicio)
+                ->whereDate('data', '<=', $fim)
+                ->sum('litros');
+        }
 
         return response()->json([
             'caminhao' => $caminhao->only(['id', 'placa', 'km_atual', 'capacidade_tanque', 'status']),
@@ -35,6 +51,14 @@ class AbastecimentoController extends Controller
                 'tipo_combustivel' => $tanque->tipo_combustivel,
             ] : null,
             'max_litros_base' => $tanque ? (float) $tanque->nivel_atual : 0,
+            'motorista' => $motorista ? [
+                'id' => $motorista->id,
+                'nome' => $motorista->nome,
+                'limite_litros_dia' => $motorista->limite_litros_dia !== null ? (float) $motorista->limite_litros_dia : null,
+                'credito_litros_mes' => $motorista->credito_litros_mes !== null ? (float) $motorista->credito_litros_mes : null,
+                'usado_dia' => round($usadoDia, 2),
+                'usado_mes' => round($usadoMes, 2),
+            ] : null,
         ]);
     }
 
@@ -48,6 +72,7 @@ class AbastecimentoController extends Controller
             'data' => ['nullable', 'date', 'before_or_equal:today'],
             'litros' => ['required', 'numeric', 'min:0.01', 'max:2000'],
             'km' => ['required', 'integer', 'min:0'],
+            'motivo_excesso' => ['nullable', 'string', 'max:255'],
             'comprovante' => ['nullable', 'image', 'max:5120'],
         ]);
 

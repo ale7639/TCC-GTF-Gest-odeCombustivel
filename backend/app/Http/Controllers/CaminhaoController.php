@@ -121,6 +121,9 @@ class CaminhaoController extends Controller
             'capacidade_tanque' => ['required', 'numeric', 'min:1', 'max:99999'],
             'km_atual' => ['required', 'integer', 'min:0'],
             'status' => ['required', Rule::in(['ativo', 'manutencao', 'inativo'])],
+            'crlv_validade' => ['nullable', 'date'],
+            'seguro_validade' => ['nullable', 'date'],
+            'meta_km_l' => ['nullable', 'numeric', 'min:0.5', 'max:20'],
             'motorista_id' => [
                 'nullable', 'integer', 'exists:motoristas,id',
                 Rule::unique('caminhoes', 'motorista_id')->ignore($caminhao?->id),

@@ -113,7 +113,10 @@ class MotoristaController extends Controller
                 Rule::unique('motoristas', 'cpf')->ignore($motorista?->id),
             ],
             'cnh' => ['required', 'string', 'max:20'],
+            'cnh_validade' => ['nullable', 'date'],
             'telefone' => ['nullable', 'string', 'max:20'],
+            'limite_litros_dia' => ['nullable', 'numeric', 'min:0', 'max:2000'],
+            'credito_litros_mes' => ['nullable', 'numeric', 'min:0', 'max:50000'],
             'ativo' => ['required', 'boolean'],
             'caminhao_id' => [
                 'nullable', 'integer', 'exists:caminhoes,id',

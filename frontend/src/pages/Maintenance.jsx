@@ -25,10 +25,11 @@ const CHECK_BASE = [
 ]
 
 const emptyForm = () => ({
-  status: 'agendada',
+  status: 'aberto',
   data_prevista: new Date().toISOString().slice(0, 10),
   data_realizada: new Date().toISOString().slice(0, 10),
   tipo: 'Troca de óleo',
+  oficina: 'Oficina parceira',
   descricao: '',
   valor: '',
   km: '',
@@ -37,6 +38,20 @@ const emptyForm = () => ({
   oleo_intervalo_km: '10000',
   oleo_proxima_data: '',
 })
+
+function osLabel(status) {
+  return { aberto: 'Aberto', em_andamento: 'Em andamento', fechado: 'Fechado', agendada: 'Aberto', concluida: 'Fechado' }[status] || status
+}
+
+function osBadge(status) {
+  if (status === 'fechado' || status === 'concluida') return 'badge-ok'
+  if (status === 'em_andamento') return 'badge-pendente'
+  return 'badge-pendente'
+}
+
+function isAberta(status) {
+  return ['aberto', 'em_andamento', 'agendada'].includes(status)
+}
 
 export default function Maintenance() {
   const { id } = useParams()
@@ -91,7 +106,7 @@ export default function Maintenance() {
     if (!form.data_prevista) return 'Informe a data prevista.'
     if (!form.descricao?.trim()) return 'Descreva o motivo / o que será feito.'
     if (!form.km) return 'Informe o KM.'
-    if (form.status === 'concluida' && !form.data_realizada) return 'Informe a data em que foi feita.'
+    if (form.status === 'fechado' && !form.data_realizada) return 'Informe a data em que foi feita.'
     return ''
   }
 
@@ -112,22 +127,23 @@ export default function Maintenance() {
       const payload = {
         status: form.status,
         data_prevista: form.data_prevista,
-        data_realizada: form.status === 'concluida' ? form.data_realizada : null,
+        data_realizada: form.status === 'fechado' ? form.data_realizada : null,
         tipo: form.tipo,
+        oficina: form.oficina || null,
         descricao: form.descricao.trim(),
         valor: form.valor === '' ? 0 : form.valor,
         km: Number(form.km),
         checklist: form.checklist,
         marcar_caminhao_manutencao: !!form.marcar_caminhao_manutencao,
       }
-      if (isOleo && form.status === 'concluida') {
+      if (isOleo && form.status === 'fechado') {
         payload.oleo_intervalo_km = Number(form.oleo_intervalo_km || 10000)
         if (form.oleo_proxima_data) payload.oleo_proxima_data = form.oleo_proxima_data
       }
       await api.post(`/caminhoes/${id}/manutencoes`, payload)
       setForm(null)
       setStep('form')
-      setOk(form.status === 'agendada' ? 'Manutenção agendada.' : 'Manutenção registrada.')
+      setOk(form.status === 'fechado' ? 'Ordem de serviço fechada.' : 'Ordem de serviço aberta.')
       await carregar()
     } catch (err) {
       setError(apiMessage(err))
@@ -150,7 +166,7 @@ export default function Maintenance() {
           : undefined,
       })
       setConcluir(null)
-      setOk('Manutenção concluída.')
+      setOk('Ordem de serviço fechada.')
       await carregar()
     } catch (err) {
       setError(apiMessage(err))
@@ -205,19 +221,20 @@ export default function Maintenance() {
 
       {form && step === 'form' && (
         <form className="card stack" onSubmit={pedirConfirmacao}>
-          <h2>Registrar manutenção</h2>
+          <h2>Ordem de serviço</h2>
           <div className="field">
-            <label>Situação</label>
+            <label>Status da OS</label>
             <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option value="agendada">Agendada (ainda vai ser feita)</option>
-              <option value="concluida">Já concluída</option>
+              <option value="aberto">Aberto</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="fechado">Fechado</option>
             </select>
           </div>
           <div className="field">
             <label>Data prevista</label>
             <input type="date" value={form.data_prevista} onChange={(e) => setForm({ ...form, data_prevista: e.target.value })} required />
           </div>
-          {form.status === 'concluida' && (
+          {form.status === 'fechado' && (
             <div className="field">
               <label>Data em que foi feita</label>
               <input type="date" value={form.data_realizada} onChange={(e) => setForm({ ...form, data_realizada: e.target.value })} required />
@@ -228,6 +245,10 @@ export default function Maintenance() {
             <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
               {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
+          </div>
+          <div className="field">
+            <label>Oficina</label>
+            <input value={form.oficina} onChange={(e) => setForm({ ...form, oficina: e.target.value })} placeholder="Nome da oficina" />
           </div>
           <div className="field">
             <label>Motivo / descrição</label>
@@ -262,7 +283,7 @@ export default function Maintenance() {
             ))}
           </fieldset>
 
-          {form.status === 'agendada' && (
+          {isAberta(form.status) && (
             <label className="check-item">
               <input
                 type="checkbox"
@@ -273,7 +294,7 @@ export default function Maintenance() {
             </label>
           )}
 
-          {isOleo && form.status === 'concluida' && (
+          {isOleo && form.status === 'fechado' && (
             <div className="stack" style={{ gap: 10 }}>
               <p className="eyebrow">Campos de óleo</p>
               <div className="field">
@@ -295,7 +316,7 @@ export default function Maintenance() {
       {form && step === 'confirm' && (
         <Confirm
           title="Confirmar manutenção?"
-          text={`${form.status === 'agendada' ? 'Agendar' : 'Registrar'} ${form.tipo} em ${caminhao.placa} — prevista ${dateBr(form.data_prevista)}${form.status === 'concluida' ? `, feita em ${dateBr(form.data_realizada)}` : ''}. Motivo: ${form.descricao}`}
+          text={`OS ${osLabel(form.status)}: ${form.tipo} em ${caminhao.placa} — prevista ${dateBr(form.data_prevista)}${form.status === 'fechado' ? `, feita em ${dateBr(form.data_realizada)}` : ''}. Motivo: ${form.descricao}`}
           confirmLabel="Salvar"
           onCancel={() => setStep('form')}
           onConfirm={salvar}
@@ -309,13 +330,12 @@ export default function Maintenance() {
           <div key={m.id} className="card stack" style={{ gap: 8 }}>
             <div className="row space">
               <strong>{m.tipo}</strong>
-              <span className={`badge ${m.status === 'agendada' ? 'badge-pendente' : 'badge-ok'}`}>
-                {m.status === 'agendada' ? 'Agendada' : 'Concluída'}
-              </span>
+              <span className={`badge ${osBadge(m.status)}`}>{osLabel(m.status)}</span>
             </div>
             <p className="muted" style={{ margin: 0 }}>
               Prevista {dateBr(m.data_prevista || m.data)}
               {m.data_realizada ? ` · Feita ${dateBr(m.data_realizada)}` : ''}
+              {m.oficina ? ` · ${m.oficina}` : ''}
               {' · '}{km(m.km)}
               {m.valor != null ? ` · ${money(m.valor)}` : ''}
             </p>
@@ -325,7 +345,20 @@ export default function Maintenance() {
                 {m.checklist.map((item) => <li key={item}>{item}</li>)}
               </ul>
             )}
-            {isGestao && m.status === 'agendada' && (
+            {isGestao && isAberta(m.status) && m.status !== 'em_andamento' && (
+              <button
+                type="button"
+                className="btn btn-soft"
+                onClick={async () => {
+                  await api.patch(`/caminhoes/${id}/manutencoes/${m.id}/status`, { status: 'em_andamento' })
+                  setOk('OS em andamento.')
+                  await carregar()
+                }}
+              >
+                Iniciar OS
+              </button>
+            )}
+            {isGestao && isAberta(m.status) && (
               <button
                 type="button"
                 className="btn btn-soft"
@@ -339,7 +372,7 @@ export default function Maintenance() {
                   oleo_intervalo_km: String(caminhao.oleo_intervalo_km || 10000),
                 })}
               >
-                Concluir agora
+                Fechar OS
               </button>
             )}
           </div>
@@ -352,7 +385,7 @@ export default function Maintenance() {
             className="modal stack"
             onSubmit={(e) => { e.preventDefault(); confirmarConclusao() }}
           >
-            <h2>Concluir manutenção</h2>
+            <h2>Fechar ordem de serviço</h2>
             <p className="muted">{concluir.tipo}</p>
             <div className="field">
               <label>Data em que foi feita</label>
@@ -367,7 +400,7 @@ export default function Maintenance() {
               <input type="number" step="0.01" value={concluir.valor} onChange={(e) => setConcluir({ ...concluir, valor: e.target.value })} />
             </div>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">Confirmar conclusão</button>
+              <button className="btn btn-primary" type="submit">Confirmar fechamento</button>
               <button type="button" className="btn btn-soft" onClick={() => setConcluir(null)}>Cancelar</button>
             </div>
           </form>

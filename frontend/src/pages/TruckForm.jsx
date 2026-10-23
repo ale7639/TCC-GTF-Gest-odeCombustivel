@@ -3,7 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../api/client'
 import { apiMessage, fieldError } from '../utils/format'
 
-const vazio = { placa: '', modelo: '', ano: new Date().getFullYear(), capacidade_tanque: '', km_atual: 0, status: 'ativo', motorista_id: '' }
+const vazio = {
+  placa: '', modelo: '', ano: new Date().getFullYear(), capacidade_tanque: '', km_atual: 0,
+  status: 'ativo', motorista_id: '', crlv_validade: '', seguro_validade: '', meta_km_l: '',
+}
 
 export default function TruckForm() {
   const { id } = useParams()
@@ -25,6 +28,9 @@ export default function TruckForm() {
         km_atual: data.km_atual,
         status: data.status,
         motorista_id: data.motorista_id || '',
+        crlv_validade: data.crlv_validade?.slice?.(0, 10) || data.crlv_validade || '',
+        seguro_validade: data.seguro_validade?.slice?.(0, 10) || data.seguro_validade || '',
+        meta_km_l: data.meta_km_l ?? '',
       }))
     }
   }, [id])
@@ -38,7 +44,13 @@ export default function TruckForm() {
     setLoading(true)
     setError('')
     setErrors({})
-    const payload = { ...form, motorista_id: form.motorista_id || null }
+    const payload = {
+      ...form,
+      motorista_id: form.motorista_id || null,
+      crlv_validade: form.crlv_validade || null,
+      seguro_validade: form.seguro_validade || null,
+      meta_km_l: form.meta_km_l !== '' ? form.meta_km_l : null,
+    }
     try {
       if (id) await api.put(`/caminhoes/${id}`, payload)
       else await api.post('/caminhoes', payload)
@@ -90,6 +102,18 @@ export default function TruckForm() {
             <option value="">Sem motorista</option>
             {motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
+        </div>
+        <div className="field">
+          <label>Validade CRLV</label>
+          <input type="date" value={form.crlv_validade || ''} onChange={(e) => set('crlv_validade', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Validade seguro</label>
+          <input type="date" value={form.seguro_validade || ''} onChange={(e) => set('seguro_validade', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Meta km/L</label>
+          <input type="number" step="0.01" value={form.meta_km_l} onChange={(e) => set('meta_km_l', e.target.value)} placeholder="ex.: 2.8" />
         </div>
         <button className="btn btn-primary" disabled={loading}>{loading ? 'Salvando…' : 'Salvar'}</button>
       </form>

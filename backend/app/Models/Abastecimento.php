@@ -14,7 +14,7 @@ class Abastecimento extends Model
     protected $fillable = [
         'caminhao_id', 'motorista_id', 'user_id', 'tanque_id',
         'origem', 'posto', 'comprovante_path',
-        'data', 'litros', 'km',
+        'data', 'litros', 'km', 'motivo_excesso',
     ];
 
     protected $casts = [

@@ -186,23 +186,25 @@ class GfcRegrasTest extends TestCase
         $admin = $this->usuario('administrador');
 
         $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$frota['caminhao']->id.'/manutencoes', [
-            'status' => 'agendada',
+            'status' => 'aberto',
             'data_prevista' => now()->addDays(2)->toDateString(),
             'tipo' => 'Revisão preventiva',
+            'oficina' => 'Oficina parceira',
             'descricao' => 'Ruído na suspensão dianteira.',
             'valor' => 0,
             'km' => 100000,
             'checklist' => ['Suspensão', 'Pneus'],
             'marcar_caminhao_manutencao' => true,
-        ])->assertCreated()->assertJsonPath('manutencao.status', 'agendada');
+        ])->assertCreated()->assertJsonPath('manutencao.status', 'aberto');
 
         $this->assertSame('manutencao', $frota['caminhao']->fresh()->status);
 
         $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$frota['caminhao']->id.'/manutencoes', [
-            'status' => 'concluida',
+            'status' => 'fechado',
             'data_prevista' => now()->toDateString(),
             'data_realizada' => now()->toDateString(),
             'tipo' => 'Troca de óleo',
+            'oficina' => 'Oficina parceira',
             'descricao' => 'Troca de óleo S15 15W40 e filtro.',
             'valor' => 850,
             'km' => 100200,

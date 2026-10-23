@@ -27,7 +27,12 @@ class DadosTesteSeeder extends Seeder
             ['nome' => 'Marcos Oliveira', 'cpf' => '333.333.333-33', 'cnh' => '12345678903', 'telefone' => '(44) 99999-0003'],
             ['nome' => 'Rafael Santos',   'cpf' => '444.444.444-44', 'cnh' => '12345678904', 'telefone' => '(44) 99999-0004'],
             ['nome' => 'André Costa',     'cpf' => '555.555.555-55', 'cnh' => '12345678905', 'telefone' => '(44) 99999-0005'],
-        ])->map(fn ($dados) => Motorista::create($dados));
+        ])->map(fn ($dados, $i) => Motorista::create([
+            ...$dados,
+            'cnh_validade' => now()->addDays([45, -5, 12, 90, 20][$i])->toDateString(),
+            'limite_litros_dia' => [400, 350, 300, 450, 380][$i],
+            'credito_litros_mes' => [4000, 3500, 3000, 4500, 3800][$i],
+        ]));
 
         // 2) Caminhões: os 5 primeiros recebem um motorista; o 6º fica sem motorista, em manutenção
         $caminhoes = collect([
@@ -49,6 +54,9 @@ class DadosTesteSeeder extends Seeder
             'oleo_ultima_km'    => $i < 5 ? $c[4] - [12000, 800, 4500, 11000, 2000][$i] : null,
             'oleo_ultima_data'  => $i < 5 ? now()->subDays([90, 20, 45, 100, 30][$i])->toDateString() : null,
             'oleo_proxima_data' => $i < 5 ? now()->addDays([20, 5, 40, -10, 25][$i])->toDateString() : null,
+            'crlv_validade' => now()->addDays([60, 8, -3, 120, 25, 40][$i])->toDateString(),
+            'seguro_validade' => now()->addDays([90, 15, 50, -2, 70, 30][$i])->toDateString(),
+            'meta_km_l' => [2.8, 3.0, 2.6, 2.5, 3.2, 2.4][$i],
         ]));
 
         // 3) Tanques da empresa (o nível já é definido aqui; o segundo está baixo de propósito,
@@ -120,8 +128,9 @@ class DadosTesteSeeder extends Seeder
                 'data'           => $data,
                 'data_prevista'  => $data,
                 'data_realizada' => $data,
-                'status'         => 'concluida',
+                'status'         => 'fechado',
                 'tipo'           => $tipo,
+                'oficina'        => 'Oficina parceira UNIALFA',
                 'descricao'      => $tipo.' realizada na oficina parceira.',
                 'checklist'      => ['Filtros conferidos', 'Nível de fluidos ok', 'Teste de estrada'],
                 'valor'          => $valor,
@@ -134,8 +143,9 @@ class DadosTesteSeeder extends Seeder
             'motorista_id'  => $caminhoes[0]->motorista_id,
             'data'          => now()->addDays(3)->toDateString(),
             'data_prevista' => now()->addDays(3)->toDateString(),
-            'status'        => 'agendada',
+            'status'        => 'aberto',
             'tipo'          => 'Revisão preventiva',
+            'oficina'       => 'Oficina parceira UNIALFA',
             'descricao'     => 'Revisão de suspensão e alinhamento antes da viagem longa.',
             'checklist'     => ['Suspensão', 'Alinhamento', 'Pneus'],
             'valor'         => 0,

@@ -32,8 +32,10 @@ function menuItems({ isGestao, isAdmin }) {
     { to: '/app/manutencao', label: 'Manutenção' },
     { to: '/app/tanques', label: 'Tanques' },
   ]
+  base.push({ to: '/app/saida', label: 'Checklist saída' })
   if (isGestao) {
     base.push({ to: '/app/motoristas', label: 'Motoristas' })
+    base.push({ to: '/app/multas', label: 'Multas' })
     base.push({ to: '/app/relatorios', label: 'Relatórios' })
   }
   if (isAdmin) base.push({ to: '/app/usuarios', label: 'Usuários' })

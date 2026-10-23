@@ -27,14 +27,14 @@ export default function MaintenanceHub() {
         <p className="eyebrow">Oficina / pátio</p>
         <h1>Manutenção</h1>
         <p className="muted" style={{ margin: '6px 0 0' }}>
-          Óleo, revisões agendadas e histórico por caminhão — não é um atalho solto.
+          Óleo, ordens de serviço e histórico por caminhão.
         </p>
       </div>
 
       <div className="kpi">
         <div className="kpi-card"><div className="num">{resumo.atrasados}</div><span>Óleo atrasado</span></div>
         <div className="kpi-card"><div className="num">{resumo.proximos}</div><span>Óleo próximo</span></div>
-        <div className="kpi-card"><div className="num">{resumo.sem_registro}</div><span>Sem registro</span></div>
+        <div className="kpi-card"><div className="num">{resumo.os_abertas ?? 0}</div><span>OS abertas</span></div>
         <div className="kpi-card"><div className="num">{caminhoes.length}</div><span>Na frota</span></div>
       </div>
 
@@ -74,7 +74,7 @@ export default function MaintenanceHub() {
               </div>
               {c.agendadas?.length > 0 && (
                 <p className="muted" style={{ margin: '8px 0 0', width: '100%' }}>
-                  Agendada: {c.agendadas[0].tipo} · {dateBr(c.agendadas[0].data_prevista || c.agendadas[0].data)}
+                  OS: {c.agendadas[0].tipo} · {c.agendadas[0].status} · {dateBr(c.agendadas[0].data_prevista || c.agendadas[0].data)}
                 </p>
               )}
             </Link>

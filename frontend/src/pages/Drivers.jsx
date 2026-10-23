@@ -5,7 +5,10 @@ import EmptyState from '../components/EmptyState'
 import { useAuth } from '../context/AuthContext'
 import { apiMessage } from '../utils/format'
 
-const vazio = { nome: '', cpf: '', cnh: '', telefone: '', ativo: true, caminhao_id: '' }
+const vazio = {
+  nome: '', cpf: '', cnh: '', cnh_validade: '', telefone: '',
+  limite_litros_dia: '', credito_litros_mes: '', ativo: true, caminhao_id: '',
+}
 
 export default function Drivers() {
   const { isAdmin } = useAuth()
@@ -26,7 +29,14 @@ export default function Drivers() {
   async function salvar(event) {
     event.preventDefault()
     setError('')
-    const payload = { ...form, ativo: Boolean(form.ativo), caminhao_id: form.caminhao_id || null }
+    const payload = {
+      ...form,
+      ativo: Boolean(form.ativo),
+      caminhao_id: form.caminhao_id || null,
+      cnh_validade: form.cnh_validade || null,
+      limite_litros_dia: form.limite_litros_dia !== '' ? form.limite_litros_dia : null,
+      credito_litros_mes: form.credito_litros_mes !== '' ? form.credito_litros_mes : null,
+    }
     try {
       if (form.id) await api.put(`/motoristas/${form.id}`, payload)
       else await api.post('/motoristas', payload)
@@ -65,7 +75,10 @@ export default function Drivers() {
             <div className="row space">
               <div>
                 <strong>{m.nome}</strong>
-                <p className="muted" style={{ margin: 0 }}>{m.caminhao?.placa || 'Sem caminhão'} · {m.telefone || 'sem telefone'}</p>
+                <p className="muted" style={{ margin: 0 }}>
+                  {m.caminhao?.placa || 'Sem caminhão'} · {m.telefone || 'sem telefone'}
+                  {m.cnh_validade ? ` · CNH até ${String(m.cnh_validade).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                </p>
               </div>
               <span className={`badge ${m.ativo ? 'badge-ok' : 'badge-nao_apto'}`}>{m.ativo ? 'Ativo' : 'Inativo'}</span>
             </div>
@@ -83,7 +96,10 @@ export default function Drivers() {
           <div className="field"><label>Nome</label><input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required /></div>
           <div className="field"><label>CPF</label><input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} required /></div>
           <div className="field"><label>CNH</label><input value={form.cnh} onChange={(e) => setForm({ ...form, cnh: e.target.value })} required /></div>
+          <div className="field"><label>Validade CNH</label><input type="date" value={form.cnh_validade?.slice?.(0, 10) || form.cnh_validade || ''} onChange={(e) => setForm({ ...form, cnh_validade: e.target.value })} /></div>
           <div className="field"><label>Telefone</label><input value={form.telefone || ''} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="(44) 99999-0000" /></div>
+          <div className="field"><label>Limite litros / dia (base)</label><input type="number" step="0.01" value={form.limite_litros_dia ?? ''} onChange={(e) => setForm({ ...form, limite_litros_dia: e.target.value })} placeholder="ex.: 400" /></div>
+          <div className="field"><label>Crédito litros / mês (base)</label><input type="number" step="0.01" value={form.credito_litros_mes ?? ''} onChange={(e) => setForm({ ...form, credito_litros_mes: e.target.value })} placeholder="ex.: 4000" /></div>
           <div className="field">
             <label>Caminhão</label>
             <select value={form.caminhao_id || ''} onChange={(e) => setForm({ ...form, caminhao_id: e.target.value })}>

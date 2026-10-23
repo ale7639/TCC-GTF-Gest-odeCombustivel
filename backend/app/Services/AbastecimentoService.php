@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Abastecimento;
 use App\Models\Caminhao;
+use App\Models\Motorista;
 use App\Models\Tanque;
 use App\Models\User;
 use App\Support\Auditoria;
@@ -42,6 +43,19 @@ class AbastecimentoService
                 throw ValidationException::withMessages([
                     'motorista_id' => 'Este caminhão não tem motorista vinculado.',
                 ]);
+            }
+
+            $motorista = Motorista::find($motoristaId);
+            $motivo = trim((string) ($dados['motivo_excesso'] ?? ''));
+            $excedeu = false;
+
+            if ($origem === 'base' && $motorista) {
+                $excedeu = $this->excedeuLimite($motorista, $litros, $dados['data'] ?? now()->toDateString());
+                if ($excedeu && $motivo === '') {
+                    throw ValidationException::withMessages([
+                        'motivo_excesso' => 'Informe o motivo: litros acima do limite/crédito do motorista.',
+                    ]);
+                }
             }
 
             $tanqueId = null;
@@ -84,6 +98,7 @@ class AbastecimentoService
                 'data' => $dados['data'] ?? now()->toDateString(),
                 'litros' => $litros,
                 'km' => $km,
+                'motivo_excesso' => $excedeu ? $motivo : ($motivo ?: null),
             ]);
 
             if ($km > (int) $caminhao->km_atual) {
@@ -95,9 +110,50 @@ class AbastecimentoService
                 'origem' => $origem,
                 'litros' => $litros,
                 'placa' => $caminhao->placa,
+                'excedeu_limite' => $excedeu,
             ]);
 
-            return $abastecimento->load(['caminhao:id,placa,km_atual', 'motorista:id,nome,telefone', 'tanque:id,nome,tipo_combustivel']);
+            return $abastecimento->load([
+                'caminhao:id,placa,km_atual',
+                'motorista:id,nome,telefone,limite_litros_dia,credito_litros_mes',
+                'tanque:id,nome,tipo_combustivel',
+            ]);
         });
+    }
+
+    /** true se ultrapassar limite diário ou crédito do mês (quando cadastrados). */
+    private function excedeuLimite(Motorista $motorista, float $litros, string $data): bool
+    {
+        $limiteDia = $motorista->limite_litros_dia !== null ? (float) $motorista->limite_litros_dia : null;
+        $creditoMes = $motorista->credito_litros_mes !== null ? (float) $motorista->credito_litros_mes : null;
+
+        if ($limiteDia === null && $creditoMes === null) {
+            return false;
+        }
+
+        if ($limiteDia !== null) {
+            $hoje = (float) Abastecimento::where('motorista_id', $motorista->id)
+                ->where('origem', 'base')
+                ->whereDate('data', $data)
+                ->sum('litros');
+            if (($hoje + $litros) > $limiteDia + 0.01) {
+                return true;
+            }
+        }
+
+        if ($creditoMes !== null) {
+            $inicio = date('Y-m-01', strtotime($data));
+            $fim = date('Y-m-t', strtotime($data));
+            $mes = (float) Abastecimento::where('motorista_id', $motorista->id)
+                ->where('origem', 'base')
+                ->whereDate('data', '>=', $inicio)
+                ->whereDate('data', '<=', $fim)
+                ->sum('litros');
+            if (($mes + $litros) > $creditoMes + 0.01) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

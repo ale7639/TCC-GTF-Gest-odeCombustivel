@@ -44,9 +44,14 @@ export default function TruckDetails() {
       <div className="card mini">
         <div><span>KM</span><strong>{km(c.km_atual)}</strong></div>
         <div><span>Média</span><strong>{kmPerLiter(c.media_km_l)}</strong></div>
-        <div><span>Tanque</span><strong>{liters(c.capacidade_tanque)}</strong></div>
+        <div><span>Meta</span><strong>{kmPerLiter(c.meta_km_l)}</strong></div>
         <div><span>Motorista</span><strong>{c.motorista?.nome || '—'}</strong></div>
       </div>
+      {(c.crlv_validade || c.seguro_validade) && (
+        <p className="muted" style={{ margin: 0 }}>
+          CRLV {dateBr(c.crlv_validade)} · Seguro {dateBr(c.seguro_validade)}
+        </p>
+      )}
       {c.oleo && (
         <Link className={`card oleo-card alerta-${c.oleo.alerta}`} to={`/app/frota/${id}/manutencao`} style={{ textDecoration: 'none' }}>
           <div className="row space">
@@ -66,6 +71,8 @@ export default function TruckDetails() {
         {isAdmin && <Link className="btn btn-soft" style={{ width: 'auto' }} to={`/app/frota/${id}/editar`}>Editar</Link>}
         <Link className="btn btn-soft" style={{ width: 'auto' }} to={`/app/frota/${id}/lavagem`}>Lavagem</Link>
         <Link className="btn btn-soft" style={{ width: 'auto' }} to={`/app/frota/${id}/manutencao`}>Manutenção</Link>
+        <Link className="btn btn-soft" style={{ width: 'auto' }} to={`/app/frota/${id}/pneus`}>Pneus</Link>
+        <Link className="btn btn-soft" style={{ width: 'auto' }} to="/app/saida">Checklist saída</Link>
       </div>
       <h2>Abastecimentos</h2>
       <div className="list">

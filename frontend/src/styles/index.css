@@ -433,3 +433,27 @@ h2 { font-size: 19px; letter-spacing: -0.02em; }
   h1 { font-size: 22px; }
   .scroll { padding-left: 12px; padding-right: 12px; }
 }
+
+@media print {
+  body, #root, .device {
+    background: #fff !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .device::before, .topbar, .bottom-nav, .overlay, .no-print, .hamburger { display: none !important; }
+  .app-screen { height: auto !important; }
+  .scroll {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding-bottom: 24px !important;
+  }
+  .report-print h1 { font-size: 20px; }
+}
