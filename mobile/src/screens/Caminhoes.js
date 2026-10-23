@@ -39,6 +39,7 @@ const formVazio = () => ({
   capacidade_tanque: '',
   km_atual: '0',
   status: 'ativo',
+  motorista_id: null, // null = sem motorista
 });
 
 // Etiqueta colorida com o status.
@@ -61,8 +62,18 @@ function Campo({ rotulo, ...props }) {
   );
 }
 
+// Botão de escolha (usado para selecionar o motorista).
+function Opcao({ texto, ativo, aoTocar }) {
+  return (
+    <Pressable onPress={aoTocar} style={[styles.opcaoSimples, ativo && styles.opcaoSimplesAtiva]}>
+      <Text style={[styles.opcaoSimplesTexto, ativo && { color: '#fff' }]}>{texto}</Text>
+    </Pressable>
+  );
+}
+
 export default function Caminhoes() {
   const [caminhoes, setCaminhoes] = useState([]);
+  const [motoristas, setMotoristas] = useState([]); // usados para escolher o motorista do caminhão
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -78,7 +89,13 @@ export default function Caminhoes() {
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      setCaminhoes(await api('/caminhoes'));
+      // As duas listas são buscadas ao mesmo tempo.
+      const [listaCaminhoes, listaMotoristas] = await Promise.all([
+        api('/caminhoes'),
+        api('/motoristas'),
+      ]);
+      setCaminhoes(listaCaminhoes);
+      setMotoristas(listaMotoristas);
     } catch (e) {
       setErro('Não foi possível carregar os caminhões. Verifique se o servidor está ligado.');
     } finally {
@@ -103,6 +120,12 @@ export default function Caminhoes() {
     );
   }, [caminhoes, busca]);
 
+  // Motoristas que podem ser escolhidos: ativos e sem caminhão, mais o que já conduz este caminhão.
+  const motoristasDisponiveis = useMemo(() => {
+    const idDele = editando && editando !== 'novo' ? editando.motorista_id : null;
+    return motoristas.filter((m) => m.id === idDele || (m.ativo && !m.caminhao));
+  }, [motoristas, editando]);
+
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
   const abrirNovo = () => {
@@ -120,6 +143,7 @@ export default function Caminhoes() {
       capacidade_tanque: String(Number(c.capacidade_tanque)),
       km_atual: String(c.km_atual),
       status: c.status,
+      motorista_id: c.motorista_id ?? null,
     });
     setErroForm(null);
     setConfirmando(false);
@@ -145,6 +169,7 @@ export default function Caminhoes() {
       capacidade_tanque: Number(String(form.capacidade_tanque).replace(',', '.')),
       km_atual: Number(form.km_atual),
       status: form.status,
+      motorista_id: form.motorista_id,
     };
 
     setSalvando(true);
@@ -296,6 +321,23 @@ export default function Caminhoes() {
             })}
           </View>
 
+          <Text style={styles.rotulo}>Motorista responsável</Text>
+          <View style={styles.opcoesQuebra}>
+            <Opcao
+              texto="Nenhum"
+              ativo={form.motorista_id === null}
+              aoTocar={() => mudar('motorista_id', null)}
+            />
+            {motoristasDisponiveis.map((m) => (
+              <Opcao
+                key={m.id}
+                texto={m.nome}
+                ativo={form.motorista_id === m.id}
+                aoTocar={() => mudar('motorista_id', m.id)}
+              />
+            ))}
+          </View>
+
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
           <Pressable
@@ -377,6 +419,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  opcoesQuebra: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  opcaoSimples: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  opcaoSimplesAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  opcaoSimplesTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
   botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },

@@ -1,4 +1,4 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import Login from './src/screens/Login';
 import Dashboard from './src/screens/Dashboard';
 import Caminhoes from './src/screens/Caminhoes';
+import Motoristas from './src/screens/Motoristas';
 
 const Tab = createBottomTabNavigator();
 
@@ -16,17 +17,6 @@ const icones = {
   Caminhões: 'truck-outline',
   Motoristas: 'account-group-outline',
 };
-
-// Tela provisória: será trocada pelas telas reais nos próximos passos.
-function EmBreve({ titulo }) {
-  return (
-    <View style={styles.emBreve}>
-      <Text style={styles.emBreveTitulo}>{titulo}</Text>
-      <Text style={styles.emBreveTexto}>Esta tela será criada nos próximos passos.</Text>
-    </View>
-  );
-}
-const TelaMotoristas = () => <EmBreve titulo="Motoristas" />;
 
 // Decide o que mostrar: carregando, login (sem sessão) ou as abas (com sessão).
 function Rotas() {
@@ -54,7 +44,7 @@ function Rotas() {
       >
         <Tab.Screen name="Painel" component={Dashboard} />
         <Tab.Screen name="Caminhões" component={Caminhoes} />
-        <Tab.Screen name="Motoristas" component={TelaMotoristas} />
+        <Tab.Screen name="Motoristas" component={Motoristas} />
       </Tab.Navigator>
     </NavigationContainer>
   );
@@ -71,12 +61,4 @@ export default function App() {
 
 const styles = StyleSheet.create({
   centro: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emBreve: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    padding: 16,
-    paddingTop: 56,
-  },
-  emBreveTitulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  emBreveTexto: { fontSize: 14, color: '#6b7280', marginTop: 8 },
 });
