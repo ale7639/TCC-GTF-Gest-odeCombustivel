@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
 
 // 15000 -> "15.000"
 const numero = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -229,12 +230,11 @@ export default function Caminhoes() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.tituloTela}>GESTÃO DE FROTA</Text>
+      <Cabecalho titulo="GESTÃO DE FROTA">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
-      </View>
+      </Cabecalho>
 
       {/* Cartões com o resumo da frota: tocar em um deles filtra a lista */}
       <View style={styles.cartoes}>

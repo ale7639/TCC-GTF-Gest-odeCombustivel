@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
 import Entradas from './Entradas';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
@@ -179,14 +180,13 @@ export default function Tanques() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.tituloTela}>GESTÃO DE TANQUES</Text>
+      <Cabecalho titulo="GESTÃO DE TANQUES">
         {aba === 'tanques' && (
           <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
             <Text style={styles.botaoNovoTexto}>+ Novo tanque</Text>
           </Pressable>
         )}
-      </View>
+      </Cabecalho>
 
       <View style={styles.segmentos}>
         {[

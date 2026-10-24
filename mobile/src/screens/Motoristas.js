@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
 
 // Mensagem amigável para qualquer erro de comunicação com a API.
 const mensagemDe = (e) =>
@@ -198,12 +199,11 @@ export default function Motoristas() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.tituloTela}>GESTÃO DE MOTORISTAS</Text>
+      <Cabecalho titulo="GESTÃO DE MOTORISTAS">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
-      </View>
+      </Cabecalho>
 
       <TextInput
         style={styles.busca}

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -190,12 +191,11 @@ export default function Abastecimentos() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Abastecimentos</Text>
+      <Cabecalho titulo="ABASTECIMENTOS">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
-      </View>
+      </Cabecalho>
 
       {erro && <Text style={styles.erro}>{erro}</Text>}
       {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}

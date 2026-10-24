@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
-import { useAuth } from '../auth/AuthContext';
+import Cabecalho from '../components/Cabecalho';
 
 // Funções de formatação: 15000 -> "15.000" | 6350 -> "R$ 6.350,00" | "2026-10-16" -> "16/10/2026"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -64,7 +64,6 @@ function NivelTanque({ tanque, destaque }) {
 }
 
 export default function Dashboard() {
-  const { sair } = useAuth();
   const [dias, setDias] = useState(30);                  // período escolhido no filtro
   const [dados, setDados] = useState(null);              // resposta da API
   const [erro, setErro] = useState(null);                // mensagem de erro, se houver
@@ -102,12 +101,7 @@ export default function Dashboard() {
         />
       }
     >
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Painel da Frota</Text>
-        <Pressable onPress={sair}>
-          <Text style={styles.sair}>Sair</Text>
-        </Pressable>
-      </View>
+      <Cabecalho titulo="PAINEL DA FROTA" />
 
       {/* Filtro de período */}
       <View style={styles.periodos}>
