@@ -4,6 +4,7 @@ use App\Http\Controllers\AbastecimentoController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CaminhaoController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EntradaCombustivelController;
 use App\Http\Controllers\MotoristaController;
 use App\Http\Controllers\TanqueController;
 use Illuminate\Http\Request;
@@ -30,5 +31,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Abastecimentos: só listar, registrar e excluir (para corrigir erros).
     Route::apiResource('abastecimentos', AbastecimentoController::class)
+        ->only(['index', 'store', 'destroy']);
+
+    // Entradas de combustível (compras com nota fiscal): só listar, registrar e excluir.
+    Route::apiResource('entradas', EntradaCombustivelController::class)
         ->only(['index', 'store', 'destroy']);
 });

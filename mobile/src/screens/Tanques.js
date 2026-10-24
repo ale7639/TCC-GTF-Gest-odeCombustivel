@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Entradas from './Entradas';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -46,6 +47,7 @@ function Campo({ rotulo, ...props }) {
 }
 
 export default function Tanques() {
+  const [aba, setAba] = useState('tanques'); // 'tanques' ou 'entradas'
   const [tanques, setTanques] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -74,7 +76,7 @@ export default function Tanques() {
   useFocusEffect(
     useCallback(() => {
       carregar();
-    }, [carregar])
+    }, [carregar, aba])
   );
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -170,57 +172,80 @@ export default function Tanques() {
   return (
     <View style={styles.tela}>
       <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Tanques</Text>
-        <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
-          <Text style={styles.botaoNovoTexto}>+ Novo</Text>
-        </Pressable>
+        <Text style={styles.titulo}>Combustível</Text>
+        {aba === 'tanques' && (
+          <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
+            <Text style={styles.botaoNovoTexto}>+ Novo tanque</Text>
+          </Pressable>
+        )}
       </View>
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+      <View style={styles.segmentos}>
+        {[
+          ['tanques', 'Tanques'],
+          ['entradas', 'Entradas'],
+        ].map(([valor, rotulo]) => (
+          <Pressable
+            key={valor}
+            onPress={() => setAba(valor)}
+            style={[styles.segmento, aba === valor && styles.segmentoAtivo]}
+          >
+            <Text style={[styles.segmentoTexto, aba === valor && { color: '#fff' }]}>{rotulo}</Text>
+          </Pressable>
+        ))}
+      </View>
 
-      <FlatList
-        data={tanques}
-        keyExtractor={(item) => String(item.id)}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
-              carregar();
+      {aba === 'entradas' && <Entradas />}
+
+      {aba === 'tanques' && (
+        <>
+          {erro && <Text style={styles.erro}>{erro}</Text>}
+          {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+          <FlatList
+            data={tanques}
+            keyExtractor={(item) => String(item.id)}
+            refreshControl={
+              <RefreshControl
+                refreshing={atualizando}
+                onRefresh={() => {
+                  setAtualizando(true);
+                  carregar();
+                }}
+              />
+            }
+            ListEmptyComponent={
+              !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
+            }
+            contentContainerStyle={{ paddingBottom: 24 }}
+            renderItem={({ item }) => {
+              const pct = percentual(item);
+              const baixo = pct < 20;
+              return (
+                <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
+                  <View style={styles.topo}>
+                    <Text style={styles.nomeItem}>
+                      {item.nome} · {item.tipo_combustivel}
+                    </Text>
+                    {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
+                  </View>
+                  <View style={styles.barraFundo}>
+                    <View
+                      style={[
+                        styles.barra,
+                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.detalhe}>
+                    {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
+                  </Text>
+                </Pressable>
+              );
             }}
           />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => {
-          const pct = percentual(item);
-          const baixo = pct < 20;
-          return (
-            <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-              <View style={styles.topo}>
-                <Text style={styles.nomeItem}>
-                  {item.nome} · {item.tipo_combustivel}
-                </Text>
-                {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
-              </View>
-              <View style={styles.barraFundo}>
-                <View
-                  style={[
-                    styles.barra,
-                    { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
-                  ]}
-                />
-              </View>
-              <Text style={styles.detalhe}>
-                {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
-              </Text>
-            </Pressable>
-          );
-        }}
-      />
+        </>
+      )}
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
@@ -317,6 +342,16 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  segmentos: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 3,
+    marginBottom: 12,
+  },
+  segmento: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  segmentoAtivo: { backgroundColor: '#2563eb' },
+  segmentoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
