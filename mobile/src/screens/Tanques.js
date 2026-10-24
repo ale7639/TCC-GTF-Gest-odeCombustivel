@@ -34,7 +34,13 @@ const mensagemDe = (e) =>
 const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina', 'Etanol'];
 
 // Formulário em branco para um tanque novo.
-const formVazio = () => ({ nome: '', tipo_combustivel: '', capacidade: '', nivel_atual: '0' });
+const formVazio = () => ({
+  nome: '',
+  tipo_combustivel: '',
+  capacidade: '',
+  nivel_atual: '0',
+  principal: false,
+});
 
 // Campo de texto com rótulo em cima.
 function Campo({ rotulo, ...props }) {
@@ -94,6 +100,7 @@ export default function Tanques() {
       tipo_combustivel: t.tipo_combustivel,
       capacidade: String(Number(t.capacidade)),
       nivel_atual: String(Number(t.nivel_atual)),
+      principal: Boolean(t.principal),
     });
     setErroForm(null);
     setConfirmando(false);
@@ -127,6 +134,7 @@ export default function Tanques() {
       nome: form.nome.trim(),
       tipo_combustivel: form.tipo_combustivel.trim(),
       capacidade,
+      principal: form.principal,
     };
     // O nível só é enviado no cadastro. Depois ele muda sozinho (entradas e abastecimentos).
     if (editando === 'novo') corpo.nivel_atual = nivel;
@@ -172,7 +180,7 @@ export default function Tanques() {
   return (
     <View style={styles.tela}>
       <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Combustível</Text>
+        <Text style={styles.tituloTela}>GESTÃO DE TANQUES</Text>
         {aba === 'tanques' && (
           <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
             <Text style={styles.botaoNovoTexto}>+ Novo tanque</Text>
@@ -226,6 +234,7 @@ export default function Tanques() {
                   <View style={styles.topo}>
                     <Text style={styles.nomeItem}>
                       {item.nome} · {item.tipo_combustivel}
+                      {item.principal ? ' · PRINCIPAL' : ''}
                     </Text>
                     {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
                   </View>
@@ -300,6 +309,24 @@ export default function Tanques() {
             </View>
           )}
 
+          <Text style={styles.rotulo}>Tanque principal da base?</Text>
+          <View style={styles.opcoes}>
+            {[
+              [true, 'Sim'],
+              [false, 'Não'],
+            ].map(([valor, rotulo]) => (
+              <Pressable
+                key={rotulo}
+                onPress={() => mudar('principal', valor)}
+                style={[styles.opcao, form.principal === valor && styles.opcaoAtiva]}
+              >
+                <Text style={[styles.opcaoTexto, form.principal === valor && { color: '#fff' }]}>
+                  {rotulo}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
           <Pressable
@@ -340,6 +367,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   segmentos: {

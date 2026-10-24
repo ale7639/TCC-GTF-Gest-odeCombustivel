@@ -10,11 +10,12 @@ class Tanque extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['nome', 'tipo_combustivel', 'capacidade', 'nivel_atual'];
+    protected $fillable = ['nome', 'tipo_combustivel', 'capacidade', 'nivel_atual', 'principal'];
 
     protected $casts = [
         'capacidade'  => 'decimal:2',
         'nivel_atual' => 'decimal:2',
+        'principal'   => 'boolean',
     ];
 
     // Combustível que chegou no tanque.

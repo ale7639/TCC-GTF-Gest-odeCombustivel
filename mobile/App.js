@@ -16,7 +16,7 @@ const Tab = createBottomTabNavigator();
 // Ícone de cada aba, pelo nome da aba.
 const icones = {
   Painel: 'view-dashboard-outline',
-  Caminhões: 'truck-outline',
+  Frota: 'truck-outline',
   Motoristas: 'account-group-outline',
   Abastecimentos: 'gas-station-outline',
   Tanques: 'water-outline',
@@ -47,7 +47,7 @@ function Rotas() {
         })}
       >
         <Tab.Screen name="Painel" component={Dashboard} />
-        <Tab.Screen name="Caminhões" component={Caminhoes} />
+        <Tab.Screen name="Frota" component={Caminhoes} />
         <Tab.Screen name="Motoristas" component={Motoristas} />
         <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
         <Tab.Screen name="Tanques" component={Tanques} />

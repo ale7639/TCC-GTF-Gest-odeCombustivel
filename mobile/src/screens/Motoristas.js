@@ -199,7 +199,7 @@ export default function Motoristas() {
   return (
     <View style={styles.tela}>
       <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Motoristas</Text>
+        <Text style={styles.tituloTela}>GESTÃO DE MOTORISTAS</Text>
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
@@ -345,6 +345,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   busca: {
@@ -363,7 +364,7 @@ const styles = StyleSheet.create({
   etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
-  formConteudo: { paddingBottom: 40 },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
