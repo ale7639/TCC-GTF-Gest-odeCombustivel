@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,6 +22,7 @@ const litrosFmt = (n) => {                                            // "273.50
   const [inteiro, decimal] = String(Number(n)).split('.');
   return separar(inteiro) + (decimal ? `,${decimal}` : '');
 };
+const consumoFmt = (n) => String(n).replace('.', ',');               // 3.25 -> "3,25"
 const dataBR = (d) => d.slice(0, 10).split('-').reverse().join('/');  // "2026-10-16..." -> "16/10/2026"
 
 // A tela mostra a data como dd/mm/aaaa; a API recebe aaaa-mm-dd.
@@ -42,6 +43,14 @@ const mensagemDe = (e) =>
     ? 'Não foi possível conectar ao servidor.'
     : e.message;
 
+// Períodos do filtro (0 = sem limite de data).
+const PERIODOS = [
+  [0, 'Tudo'],
+  [7, '7 dias'],
+  [30, '30 dias'],
+  [90, '90 dias'],
+];
+
 // Formulário em branco para um abastecimento novo.
 const formVazio = () => ({
   caminhao_id: null,
@@ -61,7 +70,7 @@ function Campo({ rotulo, ...props }) {
   );
 }
 
-// Botão de escolha (usado para caminhão e tanque).
+// Botão de escolha grande (formulário).
 function Opcao({ texto, ativo, aoTocar }) {
   return (
     <Pressable onPress={aoTocar} style={[styles.opcao, ativo && styles.opcaoAtiva]}>
@@ -70,11 +79,32 @@ function Opcao({ texto, ativo, aoTocar }) {
   );
 }
 
+// Botão de filtro pequeno (lista).
+function Chip({ texto, ativo, aoTocar }) {
+  return (
+    <Pressable onPress={aoTocar} style={[styles.chip, ativo && styles.chipAtivo]}>
+      <Text style={[styles.chipTexto, ativo && { color: '#fff' }]}>{texto}</Text>
+    </Pressable>
+  );
+}
+
 export default function Abastecimentos() {
-  const [abastecimentos, setAbastecimentos] = useState([]);
-  const [caminhoes, setCaminhoes] = useState([]);
-  const [tanques, setTanques] = useState([]);
+  const [abastecimentos, setAbastecimentos] = useState([]); // itens já carregados (acumulam ao "carregar mais")
+  const [pagina, setPagina] = useState(1);
+  const [ultimaPagina, setUltimaPagina] = useState(1);
+  const [total, setTotal] = useState(0);                    // quantos abastecimentos passam pelo filtro
+  const [totalLitros, setTotalLitros] = useState(0);        // litros de todos eles
+  const [caminhoes, setCaminhoes] = useState([]);           // usados no formulário
+  const [tanques, setTanques] = useState([]);               // usados no formulário e no filtro
+
+  // Filtros da lista.
+  const [busca, setBusca] = useState('');                   // o que está sendo digitado
+  const [buscaAplicada, setBuscaAplicada] = useState('');   // o que de fato vai para a API (após uma pausa)
+  const [tanqueFiltro, setTanqueFiltro] = useState(null);
+  const [dias, setDias] = useState(30);
+
   const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -84,38 +114,61 @@ export default function Abastecimentos() {
   const [erroForm, setErroForm] = useState(null);
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
 
-  const carregar = useCallback(async () => {
+  // Só pesquisa 0,4 s depois que a pessoa para de digitar (evita uma chamada a cada letra).
+  useEffect(() => {
+    const timer = setTimeout(() => setBuscaAplicada(busca.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [busca]);
+
+  // Busca uma página da lista com os filtros atuais.
+  const carregarLista = useCallback(
+    async (numeroPagina = 1) => {
+      try {
+        setErro(null);
+        const params = new URLSearchParams({ pagina: String(numeroPagina), dias: String(dias) });
+        if (buscaAplicada) params.set('busca', buscaAplicada);
+        if (tanqueFiltro) params.set('tanque_id', String(tanqueFiltro));
+
+        const resposta = await api(`/abastecimentos?${params.toString()}`);
+        setAbastecimentos((atual) =>
+          numeroPagina === 1 ? resposta.dados : [...atual, ...resposta.dados]
+        );
+        setPagina(resposta.pagina);
+        setUltimaPagina(resposta.ultima_pagina);
+        setTotal(resposta.total);
+        setTotalLitros(resposta.total_litros);
+      } catch (e) {
+        setErro('Não foi possível carregar os abastecimentos. Verifique se o servidor está ligado.');
+      } finally {
+        setCarregando(false);
+        setCarregandoMais(false);
+        setAtualizando(false);
+      }
+    },
+    [dias, buscaAplicada, tanqueFiltro]
+  );
+
+  // Caminhões e tanques (para o formulário e para os botões de filtro).
+  const carregarApoio = useCallback(async () => {
     try {
-      setErro(null);
-      // As três listas são buscadas ao mesmo tempo.
-      const [listaAbast, listaCaminhoes, listaTanques] = await Promise.all([
-        api('/abastecimentos'),
-        api('/caminhoes'),
-        api('/tanques'),
-      ]);
-      setAbastecimentos(listaAbast);
+      const [listaCaminhoes, listaTanques] = await Promise.all([api('/caminhoes'), api('/tanques')]);
       setCaminhoes(listaCaminhoes);
       setTanques(listaTanques);
     } catch (e) {
-      setErro('Não foi possível carregar os abastecimentos. Verifique se o servidor está ligado.');
-    } finally {
-      setCarregando(false);
-      setAtualizando(false);
+      // Se falhar, a lista principal já mostra o aviso de conexão.
     }
   }, []);
 
-  // Recarrega toda vez que a aba é aberta (os níveis dos tanques mudam a cada abastecimento).
+  // Recarrega ao abrir a aba e sempre que um filtro mudar.
   useFocusEffect(
     useCallback(() => {
-      carregar();
-    }, [carregar])
+      carregarApoio();
+      carregarLista(1);
+    }, [carregarApoio, carregarLista])
   );
 
   // Só caminhões ativos e com motorista responsável podem ser abastecidos.
-  const caminhoesDisponiveis = useMemo(
-    () => caminhoes.filter((c) => c.status === 'ativo' && c.motorista_id),
-    [caminhoes]
-  );
+  const caminhoesDisponiveis = caminhoes.filter((c) => c.status === 'ativo' && c.motorista_id);
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
@@ -164,7 +217,8 @@ export default function Abastecimentos() {
         corpo: { caminhao_id: form.caminhao_id, tanque_id: form.tanque_id, litros, km, data },
       });
       fechar();
-      await carregar();
+      carregarApoio();
+      await carregarLista(1);
     } catch (e) {
       setErroForm(mensagemDe(e));
     } finally {
@@ -182,12 +236,49 @@ export default function Abastecimentos() {
     try {
       await api(`/abastecimentos/${id}`, { metodo: 'DELETE' });
       setConfirmandoId(null);
-      await carregar();
+      carregarApoio();
+      await carregarLista(1);
     } catch (e) {
       setErro(mensagemDe(e));
       setConfirmandoId(null);
     }
   };
+
+  // Parte de cima da lista: busca, filtros e o resumo do que está filtrado.
+  const filtros = (
+    <View style={styles.filtros}>
+      <TextInput
+        style={styles.busca}
+        placeholder="Buscar por placa ou motorista"
+        value={busca}
+        onChangeText={setBusca}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+
+      <View style={styles.chips}>
+        {PERIODOS.map(([valor, rotulo]) => (
+          <Chip key={valor} texto={rotulo} ativo={dias === valor} aoTocar={() => setDias(valor)} />
+        ))}
+      </View>
+
+      <View style={styles.chips}>
+        <Chip texto="Todos os tanques" ativo={tanqueFiltro === null} aoTocar={() => setTanqueFiltro(null)} />
+        {tanques.map((t) => (
+          <Chip
+            key={t.id}
+            texto={t.nome}
+            ativo={tanqueFiltro === t.id}
+            aoTocar={() => setTanqueFiltro(t.id)}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.resumo}>
+        {total} {total === 1 ? 'abastecimento' : 'abastecimentos'} · {litrosFmt(totalLitros)} L no total
+      </Text>
+    </View>
+  );
 
   return (
     <View style={styles.tela}>
@@ -203,17 +294,41 @@ export default function Abastecimentos() {
       <FlatList
         data={abastecimentos}
         keyExtractor={(item) => String(item.id)}
+        ListHeaderComponent={filtros}
         refreshControl={
           <RefreshControl
             refreshing={atualizando}
             onRefresh={() => {
               setAtualizando(true);
-              carregar();
+              carregarApoio();
+              carregarLista(1);
             }}
           />
         }
         ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum abastecimento registrado.</Text> : null
+          !carregando && !erro ? (
+            <Text style={styles.vazio}>Nenhum abastecimento encontrado.</Text>
+          ) : null
+        }
+        ListFooterComponent={
+          pagina < ultimaPagina ? (
+            <Pressable
+              style={styles.maisBotao}
+              disabled={carregandoMais}
+              onPress={() => {
+                setCarregandoMais(true);
+                carregarLista(pagina + 1);
+              }}
+            >
+              {carregandoMais ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.maisTexto}>
+                  Carregar mais ({abastecimentos.length} de {total})
+                </Text>
+              )}
+            </Pressable>
+          ) : null
         }
         contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => (
@@ -233,6 +348,11 @@ export default function Abastecimentos() {
             </Text>
             <Text style={styles.detalhe}>
               {dataBR(item.data)} · {numero(item.km)} km
+            </Text>
+            <Text style={styles.consumo}>
+              {item.consumo_km_l != null
+                ? `${consumoFmt(item.consumo_km_l)} km/L · ${numero(item.km_rodados)} km desde o abastecimento anterior`
+                : 'Consumo: sem abastecimento anterior para comparar'}
             </Text>
           </View>
         )}
@@ -314,23 +434,43 @@ export default function Abastecimentos() {
 
 const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  cabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+
+  filtros: { marginBottom: 4 },
+  busca: { backgroundColor: '#fff', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  chip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  chipAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  resumo: { fontSize: 13, color: '#374151', fontWeight: '600', marginBottom: 10 },
+
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   principal: { fontSize: 17, fontWeight: 'bold', color: '#111827' },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  consumo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
   excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   excluirAtivo: { color: '#dc2626' },
+  maisBotao: {
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  maisTexto: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },

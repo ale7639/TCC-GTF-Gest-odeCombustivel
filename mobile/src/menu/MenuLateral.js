@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { useMenu } from './MenuContext';
@@ -10,10 +10,13 @@ const LARGURA = 280;
 // (e a tela correspondente no App.js, com o mesmo nome em "rota").
 const ITENS = [
   { rota: 'Painel', rotulo: 'Painel', icone: 'view-dashboard-outline' },
+  { secao: 'Gestão' },
   { rota: 'Frota', rotulo: 'Gestão de frota', icone: 'truck-outline' },
   { rota: 'Motoristas', rotulo: 'Gestão de motoristas', icone: 'account-group-outline' },
   { rota: 'Tanques', rotulo: 'Gestão de tanques', icone: 'water-outline' },
   { rota: 'Abastecimentos', rotulo: 'Abastecimentos', icone: 'gas-station-outline' },
+  { secao: 'Relatórios' },
+  { rota: 'RelatorioAbastecimentos', rotulo: 'Abastecimentos', icone: 'chart-box-outline' },
 ];
 
 // Menu que desliza da esquerda, aberto pelo botão de três risquinhos de cada tela.
@@ -70,8 +73,17 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
           )}
         </View>
 
-        <View style={styles.itens}>
+        <ScrollView style={styles.itens}>
           {ITENS.map((item) => {
+            // Título de grupo (não é clicável).
+            if (item.secao) {
+              return (
+                <Text key={item.secao} style={styles.secao}>
+                  {item.secao}
+                </Text>
+              );
+            }
+
             const ativo = rotaAtual === item.rota;
             return (
               <Pressable
@@ -88,7 +100,7 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <Pressable onPress={aoSair} style={styles.sair}>
           <MaterialCommunityIcons name="logout" size={22} color="#dc2626" />
@@ -123,6 +135,15 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 20,
+  },
+  secao: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    paddingHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 2,
   },
   itemAtivo: { backgroundColor: '#eff6ff' },
   itemTexto: { fontSize: 16, fontWeight: '500', color: '#374151' },

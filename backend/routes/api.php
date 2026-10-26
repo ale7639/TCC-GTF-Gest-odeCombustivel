@@ -6,6 +6,7 @@ use App\Http\Controllers\CaminhaoController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EntradaCombustivelController;
 use App\Http\Controllers\MotoristaController;
+use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\TanqueController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -36,4 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Entradas de combustível (compras com nota fiscal): só listar, registrar e excluir.
     Route::apiResource('entradas', EntradaCombustivelController::class)
         ->only(['index', 'store', 'destroy']);
+
+    // Relatórios.
+    Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);
 });

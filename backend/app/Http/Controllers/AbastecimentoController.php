@@ -15,16 +15,75 @@ class AbastecimentoController extends Controller
     // Dados de outras tabelas que acompanham cada abastecimento na resposta.
     private const RELACOES = ['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'];
 
-    // GET /api/abastecimentos — os 100 mais recentes.
-    public function index(): JsonResponse
+    // GET /api/abastecimentos — lista com filtros e paginação (20 por página).
+    // Filtros opcionais: busca (placa ou motorista), tanque_id, dias (7, 30 ou 90) e pagina.
+    public function index(Request $request): JsonResponse
     {
-        $abastecimentos = Abastecimento::with(self::RELACOES)
+        $query = Abastecimento::query();
+
+        $busca = trim((string) $request->query('busca', ''));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->whereHas('caminhao', fn ($c) => $c->where('placa', 'like', '%' . $busca . '%'))
+                  ->orWhereHas('motorista', fn ($m) => $m->where('nome', 'like', '%' . $busca . '%'));
+            });
+        }
+
+        if ($tanqueId = (int) $request->query('tanque_id')) {
+            $query->where('tanque_id', $tanqueId);
+        }
+
+        $dias = (int) $request->query('dias', 0);
+        if (in_array($dias, [7, 30, 90], true)) {
+            $query->where('data', '>=', now()->subDays($dias)->toDateString());
+        }
+
+        // Total de litros de TUDO o que passa pelo filtro (não só da página atual).
+        $totalLitros = (float) (clone $query)->sum('litros');
+
+        $pagina = $query->with(self::RELACOES)
             ->orderByDesc('data')
             ->orderByDesc('id')
-            ->limit(100)
-            ->get();
+            ->paginate(20, ['*'], 'pagina', max(1, (int) $request->query('pagina', 1)));
 
-        return response()->json($abastecimentos);
+        $itens = $pagina->getCollection()->map(function ($a) {
+            $data = $a->data->toDateString();
+
+            // Quilometragem do abastecimento anterior do mesmo caminhão (base do cálculo de consumo).
+            $kmAnterior = Abastecimento::where('caminhao_id', $a->caminhao_id)
+                ->where(function ($q) use ($a, $data) {
+                    $q->where('data', '<', $data)
+                      ->orWhere(fn ($q2) => $q2->where('data', $data)->where('id', '<', $a->id));
+                })
+                ->orderByDesc('data')
+                ->orderByDesc('id')
+                ->value('km');
+
+            // Consumo estimado: km rodados desde o abastecimento anterior ÷ litros colocados agora
+            // (considera que cada abastecimento completa o tanque do caminhão).
+            $kmRodados = ($kmAnterior !== null && $a->km > $kmAnterior) ? $a->km - $kmAnterior : null;
+            $litros    = (float) $a->litros;
+
+            return [
+                'id'           => $a->id,
+                'data'         => $data,
+                'litros'       => $litros,
+                'km'           => $a->km,
+                'km_rodados'   => $kmRodados,
+                'consumo_km_l' => ($kmRodados && $litros > 0) ? round($kmRodados / $litros, 2) : null,
+                'caminhao'     => $a->caminhao,
+                'motorista'    => $a->motorista,
+                'tanque'       => $a->tanque,
+            ];
+        });
+
+        return response()->json([
+            'dados'         => $itens->values(),
+            'pagina'        => $pagina->currentPage(),
+            'ultima_pagina' => $pagina->lastPage(),
+            'total'         => $pagina->total(),
+            'total_litros'  => $totalLitros,
+        ]);
     }
 
     // POST /api/abastecimentos — registra a saída de combustível do tanque para um caminhão.
