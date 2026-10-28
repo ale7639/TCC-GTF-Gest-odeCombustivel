@@ -37,6 +37,7 @@ class DashboardController extends Controller
                 'percentual'       => round($percentual, 1),
                 'alerta'           => $percentual < 20,
                 'principal'        => (bool) $tanque->principal,
+                'custo_medio'      => $tanque->custo_medio,
             ];
         });
 

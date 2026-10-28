@@ -71,6 +71,8 @@ class AbastecimentoController extends Controller
                 'km'           => $a->km,
                 'km_rodados'   => $kmRodados,
                 'consumo_km_l' => ($kmRodados && $litros > 0) ? round($kmRodados / $litros, 2) : null,
+                'custo_litro'  => $a->custo_litro !== null ? (float) $a->custo_litro : null,
+                'custo_total'  => $a->custo_total !== null ? round((float) $a->custo_total, 2) : null,
                 'caminhao'     => $a->caminhao,
                 'motorista'    => $a->motorista,
                 'tanque'       => $a->tanque,
@@ -146,6 +148,11 @@ class AbastecimentoController extends Controller
                 ]);
             }
 
+            // Custo médio do combustível que está no tanque agora (valor do estoque ÷ litros no tanque).
+            $nivelAntes = (float) $tanque->nivel_atual;
+            $custoLitro = $nivelAntes > 0 ? (float) $tanque->valor_estoque / $nivelAntes : 0;
+            $custoTotal = $litros * $custoLitro;
+
             $abastecimento = Abastecimento::create([
                 'caminhao_id'  => $caminhao->id,
                 'motorista_id' => $caminhao->motorista_id, // o responsável do caminhão no momento
@@ -153,9 +160,16 @@ class AbastecimentoController extends Controller
                 'data'         => $dados['data'],
                 'litros'       => $litros,
                 'km'           => $km,
+                'custo_litro'  => round($custoLitro, 4),
+                'custo_total'  => round($custoTotal, 4),
             ]);
 
-            $tanque->decrement('nivel_atual', $litros);   // sai do tanque
+            // Sai do tanque: os litros e o valor correspondente. O custo médio do que sobra não muda.
+            $novoNivel = $nivelAntes - $litros;
+            $tanque->update([
+                'nivel_atual'   => $novoNivel,
+                'valor_estoque' => $novoNivel > 0.0001 ? max(0, (float) $tanque->valor_estoque - $custoTotal) : 0,
+            ]);
             $caminhao->update(['km_atual' => $km]);       // o caminhão anda até ali
 
             return $abastecimento;
@@ -177,7 +191,16 @@ class AbastecimentoController extends Controller
                 (float) $tanque->nivel_atual + (float) $abastecimento->litros
             );
 
-            $tanque->update(['nivel_atual' => $novoNivel]);
+            // Devolve ao estoque o valor que tinha saído. Em abastecimentos antigos, sem custo gravado,
+            // usa o custo médio atual do tanque.
+            $valorDevolvido = $abastecimento->custo_total !== null
+                ? (float) $abastecimento->custo_total
+                : (float) $abastecimento->litros * (float) ($tanque->custo_medio ?? 0);
+
+            $tanque->update([
+                'nivel_atual'   => $novoNivel,
+                'valor_estoque' => (float) $tanque->valor_estoque + $valorDevolvido,
+            ]);
             $abastecimento->delete();
         });
 

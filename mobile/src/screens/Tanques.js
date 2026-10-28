@@ -22,6 +22,7 @@ const litrosFmt = (n) => {
   const [inteiro, decimal] = String(Number(n)).split('.');
   return separar(inteiro) + (decimal ? `,${decimal}` : '');
 };
+const moedaL = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',') + '/L';
 const percentual = (t) =>
   Number(t.capacidade) > 0 ? (Number(t.nivel_atual) / Number(t.capacidade)) * 100 : 0;
 
@@ -40,6 +41,7 @@ const formVazio = () => ({
   tipo_combustivel: '',
   capacidade: '',
   nivel_atual: '0',
+  custo_litro_inicial: '',
   principal: false,
 });
 
@@ -131,6 +133,12 @@ export default function Tanques() {
       return;
     }
 
+    const custoInicial = Number(String(form.custo_litro_inicial || '0').replace(',', '.'));
+    if (editando === 'novo' && (Number.isNaN(custoInicial) || custoInicial < 0)) {
+      setErroForm('Custo por litro inválido.');
+      return;
+    }
+
     const corpo = {
       nome: form.nome.trim(),
       tipo_combustivel: form.tipo_combustivel.trim(),
@@ -138,7 +146,10 @@ export default function Tanques() {
       principal: form.principal,
     };
     // O nível só é enviado no cadastro. Depois ele muda sozinho (entradas e abastecimentos).
-    if (editando === 'novo') corpo.nivel_atual = nivel;
+    if (editando === 'novo') {
+      corpo.nivel_atual = nivel;
+      corpo.custo_litro_inicial = custoInicial;
+    }
 
     setSalvando(true);
     setErroForm(null);
@@ -249,6 +260,9 @@ export default function Tanques() {
                   <Text style={styles.detalhe}>
                     {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
                   </Text>
+                  <Text style={styles.custo}>
+                    Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
+                  </Text>
                 </Pressable>
               );
             }}
@@ -294,12 +308,20 @@ export default function Tanques() {
           />
 
           {editando === 'novo' ? (
-            <Campo
-              rotulo="Nível inicial (litros)"
-              value={form.nivel_atual}
-              onChangeText={(v) => mudar('nivel_atual', v)}
-              keyboardType="decimal-pad"
-            />
+            <>
+              <Campo
+                rotulo="Nível inicial (litros)"
+                value={form.nivel_atual}
+                onChangeText={(v) => mudar('nivel_atual', v)}
+                keyboardType="decimal-pad"
+              />
+              <Campo
+                rotulo="Custo do nível inicial (R$ por litro)"
+                value={form.custo_litro_inicial}
+                onChangeText={(v) => mudar('custo_litro_inicial', v)}
+                keyboardType="decimal-pad"
+              />
+            </>
           ) : (
             <View style={styles.grupo}>
               <Text style={styles.rotulo}>Nível atual</Text>
@@ -389,6 +411,7 @@ const styles = StyleSheet.create({
   barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
+  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },

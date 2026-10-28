@@ -21,6 +21,7 @@ const litrosFmt = (n) => {                                            // "273.50
   return separar(inteiro) + (decimal ? `,${decimal}` : '');
 };
 const moeda = (n) => 'R$ ' + separar(Number(n).toFixed(2).replace('.', ','));
+const moedaL = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',') + '/L';
 const dataBR = (d) => d.slice(0, 10).split('-').reverse().join('/');  // "2026-10-16..." -> "16/10/2026"
 
 // A tela mostra a data como dd/mm/aaaa; a API recebe aaaa-mm-dd.
@@ -118,6 +119,21 @@ export default function Entradas() {
     setFormAberto(false);
     setErroForm(null);
   };
+
+  // Pré-visualização: como o custo médio do tanque escolhido muda com esta compra.
+  const tanqueEscolhido = tanques.find((t) => t.id === form.tanque_id);
+  const litrosPrev = Number(String(form.litros).replace(',', '.'));
+  const valorPrev = Number(String(form.valor_total).replace(',', '.'));
+  let previa = null;
+  if (tanqueEscolhido && litrosPrev > 0 && valorPrev >= 0) {
+    const nivel = Number(tanqueEscolhido.nivel_atual);
+    const estoque = Number(tanqueEscolhido.valor_estoque ?? 0);
+    previa = {
+      antes: nivel > 0 ? estoque / nivel : null,
+      compra: valorPrev / litrosPrev,
+      depois: (estoque + valorPrev) / (nivel + litrosPrev),
+    };
+  }
 
   const salvar = async () => {
     const litros = Number(String(form.litros).replace(',', '.'));
@@ -227,6 +243,11 @@ export default function Entradas() {
               {dataBR(item.data)} · {moeda(item.valor_total)} ·{' '}
               {moeda(Number(item.valor_total) / Number(item.litros))}/L
             </Text>
+            {item.custo_medio_apos != null && (
+              <Text style={styles.custo}>
+                Custo médio do tanque após esta entrada: {moedaL(item.custo_medio_apos)}
+              </Text>
+            )}
             <Text style={styles.detalhe}>
               {item.nota_fiscal
                 ? `NF ${item.nota_fiscal.numero} · ${item.nota_fiscal.fornecedor}`
@@ -296,6 +317,17 @@ export default function Entradas() {
             maxLength={54}
           />
 
+          {previa && (
+            <View style={styles.previa}>
+              <Text style={styles.previaTitulo}>Custo médio do tanque</Text>
+              <Text style={styles.previaLinha}>Esta compra: {moedaL(previa.compra)}</Text>
+              <Text style={styles.previaLinha}>
+                Antes: {previa.antes != null ? moedaL(previa.antes) : 'tanque vazio'}
+              </Text>
+              <Text style={styles.previaDepois}>Depois: {moedaL(previa.depois)}</Text>
+            </View>
+          )}
+
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
           <Pressable
@@ -334,6 +366,11 @@ const styles = StyleSheet.create({
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
   excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   excluirAtivo: { color: '#dc2626' },
+  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
+  previa: { backgroundColor: '#eff6ff', borderRadius: 8, padding: 12, marginBottom: 16 },
+  previaTitulo: { fontSize: 14, fontWeight: '600', color: '#1e3a8a', marginBottom: 4 },
+  previaLinha: { fontSize: 14, color: '#374151', marginTop: 2 },
+  previaDepois: { fontSize: 16, fontWeight: 'bold', color: '#1e3a8a', marginTop: 4 },
 
   modal: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 12 },

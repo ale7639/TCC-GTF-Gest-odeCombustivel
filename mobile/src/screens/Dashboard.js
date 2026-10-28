@@ -59,6 +59,11 @@ function NivelTanque({ tanque, destaque }) {
         {numero(tanque.nivel_atual)} L de {numero(tanque.capacidade)} L (
         {String(tanque.percentual).replace('.', ',')}%)
       </Text>
+      {tanque.custo_medio != null && (
+        <Text style={styles.custo}>
+          Custo médio: R$ {Number(tanque.custo_medio).toFixed(2).replace('.', ',')}/L
+        </Text>
+      )}
     </View>
   );
 }
@@ -228,4 +233,5 @@ const styles = StyleSheet.create({
   barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
+  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
 });

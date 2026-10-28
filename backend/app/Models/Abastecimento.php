@@ -10,11 +10,15 @@ class Abastecimento extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['caminhao_id', 'motorista_id', 'tanque_id', 'data', 'litros', 'km'];
+    protected $fillable = [
+        'caminhao_id', 'motorista_id', 'tanque_id', 'data', 'litros', 'km', 'custo_litro', 'custo_total',
+    ];
 
     protected $casts = [
-        'data'   => 'date',
-        'litros' => 'decimal:2',
+        'data'        => 'date',
+        'litros'      => 'decimal:2',
+        'custo_litro' => 'decimal:4',
+        'custo_total' => 'decimal:4',
     ];
 
     public function caminhao(): BelongsTo

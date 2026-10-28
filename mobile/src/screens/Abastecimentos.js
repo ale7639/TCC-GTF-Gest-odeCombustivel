@@ -23,6 +23,8 @@ const litrosFmt = (n) => {                                            // "273.50
   return separar(inteiro) + (decimal ? `,${decimal}` : '');
 };
 const consumoFmt = (n) => String(n).replace('.', ',');               // 3.25 -> "3,25"
+const moeda = (n) => 'R$ ' + separar(Number(n).toFixed(2).replace('.', ','));
+const moedaL = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',') + '/L';
 const dataBR = (d) => d.slice(0, 10).split('-').reverse().join('/');  // "2026-10-16..." -> "16/10/2026"
 
 // A tela mostra a data como dd/mm/aaaa; a API recebe aaaa-mm-dd.
@@ -349,6 +351,11 @@ export default function Abastecimentos() {
             <Text style={styles.detalhe}>
               {dataBR(item.data)} · {numero(item.km)} km
             </Text>
+            {item.custo_litro != null && (
+              <Text style={styles.detalhe}>
+                Custo: {moedaL(item.custo_litro)} · total {moeda(item.custo_total)}
+              </Text>
+            )}
             <Text style={styles.consumo}>
               {item.consumo_km_l != null
                 ? `${consumoFmt(item.consumo_km_l)} km/L · ${numero(item.km_rodados)} km desde o abastecimento anterior`

@@ -79,15 +79,23 @@ class EntradaCombustivelController extends Controller
                 ])->id;
             }
 
+            // Custo médio ponderado: (valor que já estava no tanque + valor da compra)
+            //                        ÷ (litros que já estavam + litros da compra).
+            $novoNivel  = (float) $tanque->nivel_atual + $litros;
+            $novoValor  = (float) $tanque->valor_estoque + (float) $dados['valor_total'];
+            $custoMedio = $novoNivel > 0 ? round($novoValor / $novoNivel, 4) : null;
+
             $entrada = EntradaCombustivel::create([
-                'tanque_id'      => $tanque->id,
-                'nota_fiscal_id' => $notaId,
-                'data'           => $dados['data'],
-                'litros'         => $litros,
-                'valor_total'    => $dados['valor_total'],
+                'tanque_id'        => $tanque->id,
+                'nota_fiscal_id'   => $notaId,
+                'data'             => $dados['data'],
+                'litros'           => $litros,
+                'valor_total'      => $dados['valor_total'],
+                'custo_medio_apos' => $custoMedio,
             ]);
 
-            $tanque->increment('nivel_atual', $litros);   // entra no tanque
+            // Entram no tanque os litros e o valor da compra.
+            $tanque->update(['nivel_atual' => $novoNivel, 'valor_estoque' => $novoValor]);
 
             return $entrada;
         });
@@ -108,7 +116,14 @@ class EntradaCombustivelController extends Controller
                 ]);
             }
 
-            $tanque->decrement('nivel_atual', (float) $entrada->litros);
+            // Tira do tanque os litros e o valor que essa entrada tinha colocado.
+            $novoNivel = (float) $tanque->nivel_atual - (float) $entrada->litros;
+            $tanque->update([
+                'nivel_atual'   => $novoNivel,
+                'valor_estoque' => $novoNivel > 0.0001
+                    ? max(0, (float) $tanque->valor_estoque - (float) $entrada->valor_total)
+                    : 0,
+            ]);
 
             $nota = $entrada->notaFiscal;
             $entrada->delete();
