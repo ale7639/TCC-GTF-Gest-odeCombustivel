@@ -70,16 +70,22 @@ function EtiquetaStatus({ status }) {
 }
 
 // Moldura comum dos três formulários (abastecimento, lavagem, manutenção).
-function Formulario({ titulo, visivel, aoFechar, aoEnviar, enviando, erro, children }) {
+function Formulario({ titulo, visivel, aoFechar, aoEnviar, enviando, erro, aprovacao = false, children }) {
   return (
     <Modal visible={visivel} animationType="slide" onRequestClose={aoFechar}>
       <ScrollView style={styles.modal} contentContainerStyle={styles.formConteudo} keyboardShouldPersistTaps="handled">
         <Text style={styles.titulo}>{titulo}</Text>
-        <Text style={styles.aviso}>O lançamento só vale depois que o administrador aprovar.</Text>
+        {aprovacao && (
+          <Text style={styles.aviso}>O abastecimento só vale depois que o administrador aprovar.</Text>
+        )}
         {children}
         {erro && <Text style={styles.erroForm}>{erro}</Text>}
         <Pressable style={[styles.botao, enviando && styles.desativado]} onPress={aoEnviar} disabled={enviando}>
-          {enviando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Enviar para aprovação</Text>}
+          {enviando ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.botaoTexto}>{aprovacao ? 'Enviar para aprovação' : 'Registrar'}</Text>
+          )}
         </Pressable>
         <Pressable style={styles.botaoSecundario} onPress={aoFechar} disabled={enviando}>
           <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
@@ -156,8 +162,8 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
           }
         }
       }
-      await api('/meu/abastecimentos', { metodo: 'POST', corpo });
-      aoEnviado();
+      const r = await api('/meu/abastecimentos', { metodo: 'POST', corpo });
+      aoEnviado(r.message);
     } catch (e) {
       setErro(mensagemDe(e));
     } finally {
@@ -166,7 +172,7 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
   };
 
   return (
-    <Formulario titulo="Novo abastecimento" visivel aoFechar={aoFechar} aoEnviar={enviar} enviando={enviando} erro={erro}>
+    <Formulario titulo="Novo abastecimento" aprovacao visivel aoFechar={aoFechar} aoEnviar={enviar} enviando={enviando} erro={erro}>
       <Text style={styles.rotulo}>Onde abasteceu?</Text>
       <View style={styles.opcoes}>
         <Opcao texto="Na base" ativo={origem === 'base'} aoTocar={() => setOrigem('base')} />
@@ -236,11 +242,11 @@ function FormLavagem({ aoFechar, aoEnviado }) {
     setEnviando(true);
     setErro(null);
     try {
-      await api('/meu/lavagens', {
+      const r = await api('/meu/lavagens', {
         metodo: 'POST',
         corpo: { data, valor, observacao: f.observacao.trim() || null },
       });
-      aoEnviado();
+      aoEnviado(r.message);
     } catch (e) {
       setErro(mensagemDe(e));
     } finally {
@@ -284,11 +290,11 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
     setEnviando(true);
     setErro(null);
     try {
-      await api('/meu/manutencoes', {
+      const r = await api('/meu/manutencoes', {
         metodo: 'POST',
         corpo: { data, tipo: f.tipo.trim(), descricao: f.descricao.trim() || null, valor, km },
       });
-      aoEnviado();
+      aoEnviado(r.message);
     } catch (e) {
       setErro(mensagemDe(e));
     } finally {
@@ -336,9 +342,9 @@ export default function AreaMotorista() {
     carregar();
   }, [carregar]);
 
-  const aoEnviado = () => {
+  const aoEnviado = (mensagem) => {
     setFormAberto(null);
-    setAviso('Enviado! Aguardando aprovação do administrador.');
+    setAviso(mensagem);
     carregar();
   };
 

@@ -131,7 +131,7 @@ class MeuController extends Controller
         return response()->json(['message' => 'Abastecimento enviado. Aguardando aprovação do administrador.'], 201);
     }
 
-    // POST /api/meu/lavagens
+    // POST /api/meu/lavagens — registrada direto (sem aprovação).
     public function lavar(Request $request): JsonResponse
     {
         $motorista = $request->attributes->get('motorista');
@@ -153,13 +153,13 @@ class MeuController extends Controller
             'data'         => $dados['data'],
             'valor'        => $dados['valor'],
             'observacao'   => $dados['observacao'] ?? null,
-            'status'       => 'pendente',
+            'status'       => 'aprovado', // lavagem não mexe em estoque: vale na hora, sem aprovação
         ]);
 
-        return response()->json(['message' => 'Lavagem enviada. Aguardando aprovação do administrador.'], 201);
+        return response()->json(['message' => 'Lavagem registrada.'], 201);
     }
 
-    // POST /api/meu/manutencoes
+    // POST /api/meu/manutencoes — registrada direto (sem aprovação).
     public function manter(Request $request): JsonResponse
     {
         $motorista = $request->attributes->get('motorista');
@@ -179,6 +179,7 @@ class MeuController extends Controller
             'km'        => 'quilometragem',
         ]);
 
+        // Manutenção vale na hora (sem aprovação) e atualiza o km do caminhão, se for maior.
         Manutencao::forceCreate([
             'caminhao_id'  => $caminhao->id,
             'motorista_id' => $motorista->id,
@@ -187,9 +188,10 @@ class MeuController extends Controller
             'descricao'    => $dados['descricao'] ?? null,
             'valor'        => $dados['valor'],
             'km'           => $dados['km'],
-            'status'       => 'pendente',
+            'status'       => 'aprovado',
         ]);
+        $caminhao->update(['km_atual' => max((int) $caminhao->km_atual, (int) $dados['km'])]);
 
-        return response()->json(['message' => 'Manutenção enviada. Aguardando aprovação do administrador.'], 201);
+        return response()->json(['message' => 'Manutenção registrada.'], 201);
     }
 }
