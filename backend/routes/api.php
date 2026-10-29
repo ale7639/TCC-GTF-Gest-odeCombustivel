@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CaminhaoController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EntradaCombustivelController;
+use App\Http\Controllers\LogAcessoController;
 use App\Http\Controllers\MotoristaController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\TanqueController;
@@ -40,4 +41,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Relatórios.
     Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);
+    Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
+
+    // Log de acesso (quem entrou, quando e de onde).
+    Route::get('/logs-acesso', [LogAcessoController::class, 'index']);
 });

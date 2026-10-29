@@ -13,6 +13,8 @@ import Motoristas from './src/screens/Motoristas';
 import Abastecimentos from './src/screens/Abastecimentos';
 import Tanques from './src/screens/Tanques';
 import RelatorioAbastecimentos from './src/screens/RelatorioAbastecimentos';
+import RelatorioMotoristas from './src/screens/RelatorioMotoristas';
+import LogAcesso from './src/screens/LogAcesso';
 
 const Tab = createBottomTabNavigator();
 
@@ -49,6 +51,8 @@ function Rotas() {
             <Tab.Screen name="Tanques" component={Tanques} />
             <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
             <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
+            <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
+            <Tab.Screen name="LogAcesso" component={LogAcesso} />
           </Tab.Navigator>
 
           <MenuLateral navegacao={navegacao} rotaAtual={rotaAtual} />

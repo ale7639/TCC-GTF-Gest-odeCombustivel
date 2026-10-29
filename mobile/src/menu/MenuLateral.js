@@ -17,6 +17,9 @@ const ITENS = [
   { rota: 'Abastecimentos', rotulo: 'Abastecimentos', icone: 'gas-station-outline' },
   { secao: 'Relatórios' },
   { rota: 'RelatorioAbastecimentos', rotulo: 'Abastecimentos', icone: 'chart-box-outline' },
+  { rota: 'RelatorioMotoristas', rotulo: 'Motoristas', icone: 'account-details-outline' },
+  { secao: 'Segurança' },
+  { rota: 'LogAcesso', rotulo: 'Log de acesso', icone: 'shield-account-outline' },
 ];
 
 // Menu que desliza da esquerda, aberto pelo botão de três risquinhos de cada tela.

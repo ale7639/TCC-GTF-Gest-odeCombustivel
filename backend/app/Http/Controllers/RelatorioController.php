@@ -3,8 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
+use App\Models\Lavagem;
+use App\Models\Manutencao;
+use App\Models\Motorista;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class RelatorioController extends Controller
 {
@@ -66,6 +70,75 @@ class RelatorioController extends Controller
             ],
             'por_caminhao' => $porCaminhao,
             'por_tanque'   => $porTanque,
+        ]);
+    }
+
+    // GET /api/relatorios/motoristas?dias=7|30|90|0 — o que cada motorista fez no período:
+    // abastecimentos, litros, km, consumo, lavagens e manutenções.
+    public function motoristas(Request $request): JsonResponse
+    {
+        $dias = (int) $request->query('dias', 30);
+        if (! in_array($dias, [0, 7, 30, 90], true)) {
+            $dias = 30;
+        }
+        $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
+
+        $abastecimentos = Abastecimento::with('caminhao:id,placa')
+            ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
+            ->orderBy('data')->orderBy('id')
+            ->get()
+            ->groupBy('motorista_id');
+
+        // Lavagens: só filtra por data se a coluna "data" existir na tabela.
+        $filtraLavagem = $inicio && Schema::hasColumn('lavagens', 'data');
+        $lavagens = Lavagem::query()
+            ->when($filtraLavagem, fn ($q) => $q->where('data', '>=', $inicio))
+            ->get()->groupBy('motorista_id');
+
+        $manutencoes = Manutencao::query()
+            ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
+            ->get()->groupBy('motorista_id');
+
+        $lista = Motorista::orderBy('nome')->get()->map(function ($motorista) use ($abastecimentos, $lavagens, $manutencoes) {
+            $itens = $abastecimentos->get($motorista->id, collect());
+
+            // Consumo: para cada caminhão que ele dirigiu, km rodados entre o primeiro e o último
+            // abastecimento ÷ litros (sem contar o primeiro, que repõe o que foi gasto antes do período).
+            $km = 0;
+            $litrosConsumo = 0.0;
+            foreach ($itens->groupBy('caminhao_id') as $doCaminhao) {
+                if ($doCaminhao->count() < 2) continue;
+                $km += $doCaminhao->max('km') - $doCaminhao->min('km');
+                $litrosConsumo += (float) $doCaminhao->sum('litros') - (float) $doCaminhao->first()->litros;
+            }
+
+            $manut = $manutencoes->get($motorista->id, collect());
+
+            return [
+                'motorista_id'   => $motorista->id,
+                'nome'           => $motorista->nome,
+                'placas'         => $itens->pluck('caminhao.placa')->unique()->values(),
+                'abastecimentos' => $itens->count(),
+                'litros'         => round((float) $itens->sum('litros'), 2),
+                'km_rodados'     => $km,
+                'consumo_km_l'   => ($litrosConsumo > 0 && $km > 0) ? round($km / $litrosConsumo, 2) : null,
+                'lavagens'       => $lavagens->get($motorista->id, collect())->count(),
+                'manutencoes'    => $manut->count(),
+                'gasto_manutencao' => round((float) $manut->sum('valor'), 2),
+            ];
+        });
+
+        // Quem tem atividade vem primeiro (mais litros no topo); os sem atividade ficam no fim.
+        $lista = $lista->sortByDesc(fn ($m) => [$m['litros'], $m['lavagens'] + $m['manutencoes']])->values();
+
+        return response()->json([
+            'dias'      => $dias,
+            'resumo'    => [
+                'motoristas'     => $lista->count(),
+                'com_atividade'  => $lista->filter(fn ($m) => $m['abastecimentos'] + $m['lavagens'] + $m['manutencoes'] > 0)->count(),
+                'total_litros'   => round((float) $lista->sum('litros'), 2),
+            ],
+            'motoristas' => $lista,
         ]);
     }
 }
