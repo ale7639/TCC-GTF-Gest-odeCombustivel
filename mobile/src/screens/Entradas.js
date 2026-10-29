@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -123,7 +124,7 @@ export default function Entradas() {
   // Pré-visualização: como o custo médio do tanque escolhido muda com esta compra.
   const tanqueEscolhido = tanques.find((t) => t.id === form.tanque_id);
   const litrosPrev = Number(String(form.litros).replace(',', '.'));
-  const valorPrev = Number(String(form.valor_total).replace(',', '.'));
+  const valorPrev = moedaParaNumero(form.valor_total);
   let previa = null;
   if (tanqueEscolhido && litrosPrev > 0 && valorPrev >= 0) {
     const nivel = Number(tanqueEscolhido.nivel_atual);
@@ -137,7 +138,7 @@ export default function Entradas() {
 
   const salvar = async () => {
     const litros = Number(String(form.litros).replace(',', '.'));
-    const valor = Number(String(form.valor_total).replace(',', '.'));
+    const valor = moedaParaNumero(form.valor_total);
     const data = paraISO(form.data);
 
     if (!form.tanque_id) {
@@ -291,10 +292,11 @@ export default function Entradas() {
             keyboardType="decimal-pad"
           />
           <Campo
-            rotulo="Valor total da compra (R$)"
+            rotulo="Valor total da compra"
+            placeholder="R$ 0,00"
             value={form.valor_total}
-            onChangeText={(v) => mudar('valor_total', v)}
-            keyboardType="decimal-pad"
+            onChangeText={(v) => mudar('valor_total', mascaraMoeda(v))}
+            keyboardType="numeric"
           />
 
           <Text style={styles.secao}>Nota fiscal (opcional)</Text>

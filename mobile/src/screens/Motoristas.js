@@ -14,6 +14,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { mascaraCPF, somenteDigitos } from '../utils/formatos';
 
 // Mensagem amigável para qualquer erro de comunicação com a API.
 const mensagemDe = (e) =>
@@ -29,6 +30,8 @@ const formVazio = () => ({
   telefone: '',
   ativo: true,
   caminhao_id: null, // null = sem caminhão
+  acesso_email: '',  // login do motorista (opcional)
+  acesso_senha: '',
 });
 
 // Etiqueta colorida: verde para ativo, cinza para inativo.
@@ -75,12 +78,9 @@ export default function Motoristas() {
   const [erroForm, setErroForm] = useState(null);
   const [confirmando, setConfirmando] = useState(false); // pede um segundo toque para excluir
 
-  // Login do motorista (e-mail e senha), definido pelo admin.
-  const [acessoEmail, setAcessoEmail] = useState('');
-  const [acessoSenha, setAcessoSenha] = useState('');
+  // O motorista em edição já tem login? (muda o texto do campo de senha)
   const [temAcesso, setTemAcesso] = useState(false);
-  const [msgAcesso, setMsgAcesso] = useState(null); // { texto, erro }
-  const [salvandoAcesso, setSalvandoAcesso] = useState(false);
+  const [msgAcesso, setMsgAcesso] = useState(null); // { texto, erro } — aviso da remoção do acesso
 
   const carregar = useCallback(async () => {
     try {
@@ -128,6 +128,7 @@ export default function Motoristas() {
     setForm(formVazio());
     setErroForm(null);
     setConfirmando(false);
+    setTemAcesso(false);
     setMsgAcesso(null);
     setEditando('novo');
   };
@@ -140,11 +141,11 @@ export default function Motoristas() {
       telefone: m.telefone ?? '',
       ativo: Boolean(m.ativo),
       caminhao_id: m.caminhao?.id ?? null,
+      acesso_email: m.acesso_email ?? '',
+      acesso_senha: '',
     });
     setErroForm(null);
     setConfirmando(false);
-    setAcessoEmail(m.acesso_email ?? '');
-    setAcessoSenha('');
     setTemAcesso(Boolean(m.acesso_email));
     setMsgAcesso(null);
     setEditando(m);
@@ -161,6 +162,18 @@ export default function Motoristas() {
       setErroForm('Preencha nome, CPF e CNH.');
       return;
     }
+    if (somenteDigitos(form.cpf).length !== 11) {
+      setErroForm('CPF incompleto. Exemplo: 096.668.979-89');
+      return;
+    }
+    if (somenteDigitos(form.cnh).length !== 11) {
+      setErroForm('A CNH deve ter 11 números.');
+      return;
+    }
+    if (form.acesso_email.trim() && !temAcesso && form.acesso_senha.length < 6) {
+      setErroForm('Defina uma senha de pelo menos 6 caracteres para o acesso do motorista.');
+      return;
+    }
 
     const corpo = {
       nome: form.nome.trim(),
@@ -169,6 +182,8 @@ export default function Motoristas() {
       telefone: form.telefone.trim() || null,
       ativo: form.ativo,
       caminhao_id: form.caminhao_id,
+      acesso_email: form.acesso_email.trim() || null,
+      acesso_senha: form.acesso_senha || null,
     };
 
     setSalvando(true);
@@ -188,44 +203,19 @@ export default function Motoristas() {
     }
   };
 
-  // Cria ou altera o login do motorista (senha em branco = mantém a atual).
-  const salvarAcesso = async () => {
-    if (!acessoEmail.trim()) {
-      setMsgAcesso({ texto: 'Informe o e-mail de acesso.', erro: true });
-      return;
-    }
-    setSalvandoAcesso(true);
-    setMsgAcesso(null);
-    try {
-      const r = await api(`/motoristas/${editando.id}/acesso`, {
-        metodo: 'PUT',
-        corpo: { email: acessoEmail.trim(), password: acessoSenha || null },
-      });
-      setTemAcesso(true);
-      setAcessoSenha('');
-      setMsgAcesso({ texto: r.message, erro: false });
-      carregar();
-    } catch (e) {
-      setMsgAcesso({ texto: mensagemDe(e), erro: true });
-    } finally {
-      setSalvandoAcesso(false);
-    }
-  };
-
   const removerAcesso = async () => {
-    setSalvandoAcesso(true);
+    setSalvando(true);
     setMsgAcesso(null);
     try {
       await api(`/motoristas/${editando.id}/acesso`, { metodo: 'DELETE' });
       setTemAcesso(false);
-      setAcessoEmail('');
-      setAcessoSenha('');
+      setForm((atual) => ({ ...atual, acesso_email: '', acesso_senha: '' }));
       setMsgAcesso({ texto: 'Acesso removido.', erro: false });
       carregar();
     } catch (e) {
       setMsgAcesso({ texto: mensagemDe(e), erro: true });
     } finally {
-      setSalvandoAcesso(false);
+      setSalvando(false);
     }
   };
 
@@ -316,17 +306,19 @@ export default function Motoristas() {
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
           <Campo
             rotulo="CPF"
+            placeholder="Ex.: 096.668.979-89"
             value={form.cpf}
-            onChangeText={(v) => mudar('cpf', v)}
+            onChangeText={(v) => mudar('cpf', mascaraCPF(v))}
             keyboardType="numeric"
             maxLength={14}
           />
           <Campo
-            rotulo="CNH"
+            rotulo="CNH (número de registro, 11 números)"
+            placeholder="Ex.: 01234567890"
             value={form.cnh}
-            onChangeText={(v) => mudar('cnh', v)}
+            onChangeText={(v) => mudar('cnh', somenteDigitos(v).slice(0, 11))}
             keyboardType="numeric"
-            maxLength={20}
+            maxLength={11}
           />
           <Campo
             rotulo="Telefone (opcional)"
@@ -359,46 +351,35 @@ export default function Motoristas() {
             ))}
           </View>
 
-          <Text style={styles.secaoAcesso}>Acesso ao sistema (login do motorista)</Text>
-          {editando === 'novo' ? (
-            <Text style={styles.dica}>Salve o motorista primeiro. Depois abra o cadastro dele para criar o e-mail e a senha.</Text>
-          ) : (
-            <View style={styles.caixaAcesso}>
-              <Campo
-                rotulo="E-mail de acesso"
-                value={acessoEmail}
-                onChangeText={setAcessoEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              <Campo
-                rotulo={temAcesso ? 'Nova senha (deixe em branco para manter)' : 'Senha (mínimo 6 caracteres)'}
-                value={acessoSenha}
-                onChangeText={setAcessoSenha}
-                secureTextEntry
-                autoCapitalize="none"
-              />
-              {msgAcesso && (
-                <Text style={msgAcesso.erro ? styles.erroForm : styles.okAcesso}>{msgAcesso.texto}</Text>
-              )}
-              <Pressable
-                style={[styles.botaoAcesso, salvandoAcesso && styles.desativado]}
-                onPress={salvarAcesso}
-                disabled={salvandoAcesso}
-              >
-                {salvandoAcesso ? (
-                  <ActivityIndicator color="#2563eb" />
-                ) : (
-                  <Text style={styles.botaoAcessoTexto}>{temAcesso ? 'Salvar acesso' : 'Criar acesso'}</Text>
-                )}
+          <Text style={styles.secaoAcesso}>Acesso ao sistema (opcional)</Text>
+          <Text style={styles.dica}>
+            Preencha para o motorista poder entrar no app. Ele verá só o caminhão dele.
+          </Text>
+          <View style={styles.caixaAcesso}>
+            <Campo
+              rotulo="E-mail de acesso"
+              placeholder="Ex.: joao@empresa.com"
+              value={form.acesso_email}
+              onChangeText={(v) => mudar('acesso_email', v)}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <Campo
+              rotulo={temAcesso ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha (mínimo 6 caracteres)'}
+              value={form.acesso_senha}
+              onChangeText={(v) => mudar('acesso_senha', v)}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            {msgAcesso && (
+              <Text style={msgAcesso.erro ? styles.erroForm : styles.okAcesso}>{msgAcesso.texto}</Text>
+            )}
+            {temAcesso && (
+              <Pressable onPress={removerAcesso} disabled={salvando}>
+                <Text style={styles.removerAcesso}>Remover acesso deste motorista</Text>
               </Pressable>
-              {temAcesso && (
-                <Pressable onPress={removerAcesso} disabled={salvandoAcesso} style={{ marginTop: 10 }}>
-                  <Text style={styles.removerAcesso}>Remover acesso</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
+            )}
+          </View>
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 

@@ -17,6 +17,9 @@ use Illuminate\Validation\Rule;
 
 class MotoristaController extends Controller
 {
+    // Campos do formulário que não são colunas da tabela motoristas.
+    private const NAO_SAO_DO_MOTORISTA = ['caminhao_id', 'acesso_email', 'acesso_senha'];
+
     // GET /api/motoristas — lista todos, com o caminhão pelo qual cada um é responsável.
     public function index(): JsonResponse
     {
@@ -39,8 +42,9 @@ class MotoristaController extends Controller
 
         // A transaction garante que, se algo falhar no meio, nada fica salvo pela metade.
         $motorista = DB::transaction(function () use ($dados) {
-            $motorista = Motorista::create(Arr::except($dados, 'caminhao_id'));
+            $motorista = Motorista::create(Arr::except($dados, self::NAO_SAO_DO_MOTORISTA));
             $this->vincular($motorista, $dados['caminhao_id'] ?? null);
+            $this->salvarAcesso($motorista, $dados);
 
             return $motorista;
         });
@@ -60,11 +64,13 @@ class MotoristaController extends Controller
         $dados = $this->validar($request, $motorista);
 
         DB::transaction(function () use ($motorista, $dados) {
-            $motorista->update(Arr::except($dados, 'caminhao_id'));
+            $motorista->update(Arr::except($dados, self::NAO_SAO_DO_MOTORISTA));
 
             if (array_key_exists('caminhao_id', $dados)) {
                 $this->vincular($motorista, $dados['caminhao_id']);
             }
+
+            $this->salvarAcesso($motorista, $dados);
         });
 
         return response()->json($motorista->load('caminhao:id,placa,modelo,motorista_id'));
@@ -95,50 +101,42 @@ class MotoristaController extends Controller
         return response()->json(['message' => 'Motorista excluído.']);
     }
 
-    // PUT /api/motoristas/{id}/acesso — o admin cria ou altera o e-mail e a senha de login do motorista.
-    // Ao criar, a senha é obrigatória. Ao alterar, deixar a senha em branco mantém a atual.
-    public function definirAcesso(Request $request, Motorista $motorista): JsonResponse
+    // Cria ou atualiza o login do motorista com o e-mail e a senha vindos do formulário.
+    // E-mail em branco = não mexe no acesso. Senha em branco numa edição = mantém a atual.
+    private function salvarAcesso(Motorista $motorista, array $dados): void
     {
         $usuario = User::where('motorista_id', $motorista->id)->first();
+        $email   = $dados['acesso_email'] ?? null;
+        $senha   = $dados['acesso_senha'] ?? null;
 
-        $dados = $request->validate([
-            'email'    => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($usuario?->id)],
-            'password' => [$usuario ? 'nullable' : 'required', 'string', 'min:6', 'max:100'],
-        ], [
-            'email.unique'      => 'Este e-mail já está em uso.',
-            'email.email'       => 'E-mail inválido.',
-            'password.required' => 'Defina uma senha para criar o acesso.',
-            'password.min'      => 'A senha precisa ter pelo menos 6 caracteres.',
-            'required'          => 'Preencha o campo :attribute.',
-        ], [
-            'password' => 'senha',
-        ]);
+        if (! $email) {
+            // Mantém o nome do login igual ao do cadastro.
+            $usuario?->forceFill(['name' => $motorista->nome])->save();
 
-        DB::transaction(function () use ($usuario, $motorista, $dados) {
-            if (! $usuario) {
-                User::forceCreate([
-                    'name'         => $motorista->nome,
-                    'email'        => $dados['email'],
-                    'password'     => Hash::make($dados['password']),
-                    'perfil'       => 'motorista',
-                    'motorista_id' => $motorista->id,
-                ]);
+            return;
+        }
 
-                return;
-            }
+        if (! $usuario) {
+            User::forceCreate([
+                'name'         => $motorista->nome,
+                'email'        => $email,
+                'password'     => Hash::make($senha),
+                'perfil'       => 'motorista',
+                'motorista_id' => $motorista->id,
+            ]);
 
-            $usuario->forceFill(['email' => $dados['email'], 'name' => $motorista->nome]);
+            return;
+        }
 
-            // Trocou a senha: derruba as sessões abertas, para valer a senha nova.
-            if (! empty($dados['password'])) {
-                $usuario->forceFill(['password' => Hash::make($dados['password'])]);
-                $usuario->tokens()->delete();
-            }
+        $usuario->forceFill(['email' => $email, 'name' => $motorista->nome]);
 
-            $usuario->save();
-        });
+        // Trocou a senha: derruba as sessões abertas, para valer a senha nova.
+        if ($senha) {
+            $usuario->forceFill(['password' => Hash::make($senha)]);
+            $usuario->tokens()->delete();
+        }
 
-        return response()->json(['message' => $usuario ? 'Acesso atualizado.' : 'Acesso criado.', 'acesso_email' => $dados['email']]);
+        $usuario->save();
     }
 
     // DELETE /api/motoristas/{id}/acesso — remove o login (o cadastro do motorista continua).
@@ -176,13 +174,21 @@ class MotoristaController extends Controller
             }
         }
 
+        // CNH: guarda só os números (o número de registro da CNH tem 11 dígitos).
+        if ($request->filled('cnh')) {
+            $request->merge(['cnh' => preg_replace('/\D/', '', $request->input('cnh'))]);
+        }
+
+        // Login atual deste motorista (para não acusar "e-mail em uso" com o e-mail dele mesmo).
+        $usuario = $motorista ? User::where('motorista_id', $motorista->id)->first() : null;
+
         return $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'cpf'  => [
                 'required', 'string', 'regex:/^\d{3}\.\d{3}\.\d{3}-\d{2}$/',
                 Rule::unique('motoristas', 'cpf')->ignore($motorista?->id),
             ],
-            'cnh'      => ['required', 'string', 'max:20'],
+            'cnh'      => ['required', 'digits:11'],
             'telefone' => ['nullable', 'string', 'max:20'],
             'ativo'    => ['required', 'boolean'],
             'caminhao_id' => [
@@ -196,9 +202,23 @@ class MotoristaController extends Controller
                     }
                 },
             ],
+            'acesso_email' => [
+                'nullable', 'email', 'max:255',
+                Rule::unique('users', 'email')->ignore($usuario?->id),
+            ],
+            // Senha obrigatória só quando o login está sendo criado agora.
+            'acesso_senha' => [
+                'nullable', 'string', 'min:6', 'max:100',
+                Rule::requiredIf(fn () => $request->filled('acesso_email') && ! $usuario),
+            ],
         ], [
             'cpf.unique'         => 'Já existe um motorista com este CPF.',
-            'cpf.regex'          => 'CPF inválido. Informe os 11 números.',
+            'cpf.regex'          => 'CPF inválido. Use o formato 000.000.000-00.',
+            'cnh.digits'         => 'A CNH deve ter 11 números.',
+            'acesso_email.email' => 'E-mail de acesso inválido.',
+            'acesso_email.unique'=> 'Este e-mail de acesso já está em uso.',
+            'acesso_senha.required' => 'Defina uma senha para criar o acesso do motorista.',
+            'acesso_senha.min'   => 'A senha precisa ter pelo menos 6 caracteres.',
             'caminhao_id.exists' => 'Caminhão não encontrado.',
             'required'           => 'Preencha o campo :attribute.',
         ]);

@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 
 // ---------- Funções de formatação ----------
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -126,7 +127,7 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
   const enviar = async () => {
     const litros = decimal(f.litros);
     const km = Number(f.km);
-    const valor = decimal(f.valor_total);
+    const valor = moedaParaNumero(f.valor_total);
     const data = paraISO(f.data);
 
     if (origem === 'base' && !f.tanque_id) return setErro('Escolha o tanque.');
@@ -203,10 +204,11 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
         <>
           <Campo rotulo="Nome do posto" value={f.posto} onChangeText={(v) => mudar('posto', v)} />
           <Campo
-            rotulo="Valor total pago (R$)"
+            rotulo="Valor total pago"
+            placeholder="R$ 0,00"
             value={f.valor_total}
-            onChangeText={(v) => mudar('valor_total', v)}
-            keyboardType="decimal-pad"
+            onChangeText={(v) => mudar('valor_total', mascaraMoeda(v))}
+            keyboardType="numeric"
           />
           <Campo
             rotulo="Número da nota fiscal (opcional)"
@@ -234,7 +236,7 @@ function FormLavagem({ aoFechar, aoEnviado }) {
   const mudar = (campo, valor) => setF((atual) => ({ ...atual, [campo]: valor }));
 
   const enviar = async () => {
-    const valor = decimal(f.valor);
+    const valor = moedaParaNumero(f.valor);
     const data = paraISO(f.data);
     if (!data) return setErro('Informe a data no formato dd/mm/aaaa.');
     if (f.valor === '' || Number.isNaN(valor) || valor < 0) return setErro('Informe o valor da lavagem.');
@@ -257,7 +259,13 @@ function FormLavagem({ aoFechar, aoEnviado }) {
   return (
     <Formulario titulo="Nova lavagem" visivel aoFechar={aoFechar} aoEnviar={enviar} enviando={enviando} erro={erro}>
       <Campo rotulo="Data (dd/mm/aaaa)" value={f.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
-      <Campo rotulo="Valor (R$)" value={f.valor} onChangeText={(v) => mudar('valor', v)} keyboardType="decimal-pad" />
+      <Campo
+        rotulo="Valor"
+        placeholder="R$ 0,00"
+        value={f.valor}
+        onChangeText={(v) => mudar('valor', mascaraMoeda(v))}
+        keyboardType="numeric"
+      />
       <Campo rotulo="Observação (opcional)" value={f.observacao} onChangeText={(v) => mudar('observacao', v)} />
     </Formulario>
   );
@@ -279,7 +287,7 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
   const mudar = (campo, valor) => setF((atual) => ({ ...atual, [campo]: valor }));
 
   const enviar = async () => {
-    const valor = decimal(f.valor);
+    const valor = moedaParaNumero(f.valor);
     const km = Number(f.km);
     const data = paraISO(f.data);
     if (!f.tipo.trim()) return setErro('Informe o tipo de manutenção.');
@@ -311,7 +319,13 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
         ))}
       </View>
       <Campo rotulo="Descrição (opcional)" value={f.descricao} onChangeText={(v) => mudar('descricao', v)} multiline />
-      <Campo rotulo="Valor (R$)" value={f.valor} onChangeText={(v) => mudar('valor', v)} keyboardType="decimal-pad" />
+      <Campo
+        rotulo="Valor"
+        placeholder="R$ 0,00"
+        value={f.valor}
+        onChangeText={(v) => mudar('valor', mascaraMoeda(v))}
+        keyboardType="numeric"
+      />
       <Campo rotulo="Quilometragem do caminhão" value={f.km} onChangeText={(v) => mudar('km', v)} keyboardType="numeric" />
       <Campo rotulo="Data (dd/mm/aaaa)" value={f.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
     </Formulario>

@@ -46,8 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('motoristas', MotoristaController::class);
         Route::apiResource('tanques', TanqueController::class);
 
-        // Login do motorista (criado e alterado pelo admin).
-        Route::put('/motoristas/{motorista}/acesso', [MotoristaController::class, 'definirAcesso']);
+        // Login do motorista: criado e alterado junto com o cadastro; aqui só a remoção.
         Route::delete('/motoristas/{motorista}/acesso', [MotoristaController::class, 'removerAcesso']);
 
         // Abastecimentos: só listar, registrar e excluir (para corrigir erros).

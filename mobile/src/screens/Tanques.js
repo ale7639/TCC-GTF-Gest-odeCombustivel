@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 import Cabecalho from '../components/Cabecalho';
 import Entradas from './Entradas';
 
@@ -133,7 +134,7 @@ export default function Tanques() {
       return;
     }
 
-    const custoInicial = Number(String(form.custo_litro_inicial || '0').replace(',', '.'));
+    const custoInicial = form.custo_litro_inicial ? moedaParaNumero(form.custo_litro_inicial) : 0;
     if (editando === 'novo' && (Number.isNaN(custoInicial) || custoInicial < 0)) {
       setErroForm('Custo por litro inválido.');
       return;
@@ -316,10 +317,11 @@ export default function Tanques() {
                 keyboardType="decimal-pad"
               />
               <Campo
-                rotulo="Custo do nível inicial (R$ por litro)"
+                rotulo="Custo do nível inicial (por litro)"
+                placeholder="R$ 0,00"
                 value={form.custo_litro_inicial}
-                onChangeText={(v) => mudar('custo_litro_inicial', v)}
-                keyboardType="decimal-pad"
+                onChangeText={(v) => mudar('custo_litro_inicial', mascaraMoeda(v))}
+                keyboardType="numeric"
               />
             </>
           ) : (
