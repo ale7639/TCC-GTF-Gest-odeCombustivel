@@ -7,10 +7,12 @@ use App\Models\Caminhao;
 use App\Models\Lavagem;
 use App\Models\Manutencao;
 use App\Models\Motorista;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class MotoristaController extends Controller
@@ -22,7 +24,12 @@ class MotoristaController extends Controller
             ->orderBy('nome')
             ->get();
 
-        return response()->json($motoristas);
+        // Junta o e-mail de acesso (login) de cada motorista, quando existe.
+        $emails = User::whereNotNull('motorista_id')->pluck('email', 'motorista_id');
+
+        return response()->json(
+            $motoristas->map(fn ($m) => array_merge($m->toArray(), ['acesso_email' => $emails[$m->id] ?? null]))
+        );
     }
 
     // POST /api/motoristas — cadastra um motorista (e já pode vincular a um caminhão).
@@ -76,10 +83,73 @@ class MotoristaController extends Controller
             ], 409);
         }
 
+        // O login do motorista (se houver) é apagado junto, com as sessões abertas.
+        User::where('motorista_id', $motorista->id)->get()->each(function ($usuario) {
+            $usuario->tokens()->delete();
+            $usuario->delete();
+        });
+
         // O caminhão dele (se houver) fica sem motorista automaticamente (nullOnDelete da migration).
         $motorista->delete();
 
         return response()->json(['message' => 'Motorista excluído.']);
+    }
+
+    // PUT /api/motoristas/{id}/acesso — o admin cria ou altera o e-mail e a senha de login do motorista.
+    // Ao criar, a senha é obrigatória. Ao alterar, deixar a senha em branco mantém a atual.
+    public function definirAcesso(Request $request, Motorista $motorista): JsonResponse
+    {
+        $usuario = User::where('motorista_id', $motorista->id)->first();
+
+        $dados = $request->validate([
+            'email'    => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($usuario?->id)],
+            'password' => [$usuario ? 'nullable' : 'required', 'string', 'min:6', 'max:100'],
+        ], [
+            'email.unique'      => 'Este e-mail já está em uso.',
+            'email.email'       => 'E-mail inválido.',
+            'password.required' => 'Defina uma senha para criar o acesso.',
+            'password.min'      => 'A senha precisa ter pelo menos 6 caracteres.',
+            'required'          => 'Preencha o campo :attribute.',
+        ], [
+            'password' => 'senha',
+        ]);
+
+        DB::transaction(function () use ($usuario, $motorista, $dados) {
+            if (! $usuario) {
+                User::forceCreate([
+                    'name'         => $motorista->nome,
+                    'email'        => $dados['email'],
+                    'password'     => Hash::make($dados['password']),
+                    'perfil'       => 'motorista',
+                    'motorista_id' => $motorista->id,
+                ]);
+
+                return;
+            }
+
+            $usuario->forceFill(['email' => $dados['email'], 'name' => $motorista->nome]);
+
+            // Trocou a senha: derruba as sessões abertas, para valer a senha nova.
+            if (! empty($dados['password'])) {
+                $usuario->forceFill(['password' => Hash::make($dados['password'])]);
+                $usuario->tokens()->delete();
+            }
+
+            $usuario->save();
+        });
+
+        return response()->json(['message' => $usuario ? 'Acesso atualizado.' : 'Acesso criado.', 'acesso_email' => $dados['email']]);
+    }
+
+    // DELETE /api/motoristas/{id}/acesso — remove o login (o cadastro do motorista continua).
+    public function removerAcesso(Motorista $motorista): JsonResponse
+    {
+        User::where('motorista_id', $motorista->id)->get()->each(function ($usuario) {
+            $usuario->tokens()->delete();
+            $usuario->delete();
+        });
+
+        return response()->json(['message' => 'Acesso removido.']);
     }
 
     // Define qual caminhão o motorista conduz: solta o anterior e prende o novo (ou nenhum).

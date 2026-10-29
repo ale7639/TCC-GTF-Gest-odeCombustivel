@@ -346,11 +346,13 @@ export default function Abastecimentos() {
               </Pressable>
             </View>
             <Text style={styles.detalhe}>
-              {item.motorista.nome} · {item.tanque.nome}
+              {item.motorista.nome} ·{' '}
+              {item.tanque ? item.tanque.nome : `Fora da base · ${item.posto ?? 'posto'}`}
             </Text>
             <Text style={styles.detalhe}>
               {dataBR(item.data)} · {numero(item.km)} km
             </Text>
+            {item.nota_numero ? <Text style={styles.detalhe}>NF {item.nota_numero}</Text> : null}
             {item.custo_litro != null && (
               <Text style={styles.detalhe}>
                 Custo: {moedaL(item.custo_litro)} · total {moeda(item.custo_total)}

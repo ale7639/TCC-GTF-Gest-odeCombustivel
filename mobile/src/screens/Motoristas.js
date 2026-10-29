@@ -75,6 +75,13 @@ export default function Motoristas() {
   const [erroForm, setErroForm] = useState(null);
   const [confirmando, setConfirmando] = useState(false); // pede um segundo toque para excluir
 
+  // Login do motorista (e-mail e senha), definido pelo admin.
+  const [acessoEmail, setAcessoEmail] = useState('');
+  const [acessoSenha, setAcessoSenha] = useState('');
+  const [temAcesso, setTemAcesso] = useState(false);
+  const [msgAcesso, setMsgAcesso] = useState(null); // { texto, erro }
+  const [salvandoAcesso, setSalvandoAcesso] = useState(false);
+
   const carregar = useCallback(async () => {
     try {
       setErro(null);
@@ -121,6 +128,7 @@ export default function Motoristas() {
     setForm(formVazio());
     setErroForm(null);
     setConfirmando(false);
+    setMsgAcesso(null);
     setEditando('novo');
   };
 
@@ -135,6 +143,10 @@ export default function Motoristas() {
     });
     setErroForm(null);
     setConfirmando(false);
+    setAcessoEmail(m.acesso_email ?? '');
+    setAcessoSenha('');
+    setTemAcesso(Boolean(m.acesso_email));
+    setMsgAcesso(null);
     setEditando(m);
   };
 
@@ -173,6 +185,47 @@ export default function Motoristas() {
       setErroForm(mensagemDe(e));
     } finally {
       setSalvando(false);
+    }
+  };
+
+  // Cria ou altera o login do motorista (senha em branco = mantém a atual).
+  const salvarAcesso = async () => {
+    if (!acessoEmail.trim()) {
+      setMsgAcesso({ texto: 'Informe o e-mail de acesso.', erro: true });
+      return;
+    }
+    setSalvandoAcesso(true);
+    setMsgAcesso(null);
+    try {
+      const r = await api(`/motoristas/${editando.id}/acesso`, {
+        metodo: 'PUT',
+        corpo: { email: acessoEmail.trim(), password: acessoSenha || null },
+      });
+      setTemAcesso(true);
+      setAcessoSenha('');
+      setMsgAcesso({ texto: r.message, erro: false });
+      carregar();
+    } catch (e) {
+      setMsgAcesso({ texto: mensagemDe(e), erro: true });
+    } finally {
+      setSalvandoAcesso(false);
+    }
+  };
+
+  const removerAcesso = async () => {
+    setSalvandoAcesso(true);
+    setMsgAcesso(null);
+    try {
+      await api(`/motoristas/${editando.id}/acesso`, { metodo: 'DELETE' });
+      setTemAcesso(false);
+      setAcessoEmail('');
+      setAcessoSenha('');
+      setMsgAcesso({ texto: 'Acesso removido.', erro: false });
+      carregar();
+    } catch (e) {
+      setMsgAcesso({ texto: mensagemDe(e), erro: true });
+    } finally {
+      setSalvandoAcesso(false);
     }
   };
 
@@ -246,6 +299,7 @@ export default function Motoristas() {
             <Text style={styles.detalhe}>
               Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
             </Text>
+            <Text style={styles.detalhe}>Acesso: {item.acesso_email ?? 'sem login'}</Text>
           </Pressable>
         )}
       />
@@ -304,6 +358,47 @@ export default function Motoristas() {
               />
             ))}
           </View>
+
+          <Text style={styles.secaoAcesso}>Acesso ao sistema (login do motorista)</Text>
+          {editando === 'novo' ? (
+            <Text style={styles.dica}>Salve o motorista primeiro. Depois abra o cadastro dele para criar o e-mail e a senha.</Text>
+          ) : (
+            <View style={styles.caixaAcesso}>
+              <Campo
+                rotulo="E-mail de acesso"
+                value={acessoEmail}
+                onChangeText={setAcessoEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <Campo
+                rotulo={temAcesso ? 'Nova senha (deixe em branco para manter)' : 'Senha (mínimo 6 caracteres)'}
+                value={acessoSenha}
+                onChangeText={setAcessoSenha}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              {msgAcesso && (
+                <Text style={msgAcesso.erro ? styles.erroForm : styles.okAcesso}>{msgAcesso.texto}</Text>
+              )}
+              <Pressable
+                style={[styles.botaoAcesso, salvandoAcesso && styles.desativado]}
+                onPress={salvarAcesso}
+                disabled={salvandoAcesso}
+              >
+                {salvandoAcesso ? (
+                  <ActivityIndicator color="#2563eb" />
+                ) : (
+                  <Text style={styles.botaoAcessoTexto}>{temAcesso ? 'Salvar acesso' : 'Criar acesso'}</Text>
+                )}
+              </Pressable>
+              {temAcesso && (
+                <Pressable onPress={removerAcesso} disabled={salvandoAcesso} style={{ marginTop: 10 }}>
+                  <Text style={styles.removerAcesso}>Remover acesso</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
@@ -403,4 +498,11 @@ const styles = StyleSheet.create({
   },
   botaoExcluirAtivo: { backgroundColor: '#dc2626' },
   botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  secaoAcesso: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 8 },
+  dica: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
+  caixaAcesso: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 },
+  botaoAcesso: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 12, alignItems: 'center' },
+  botaoAcessoTexto: { color: '#2563eb', fontSize: 15, fontWeight: '600' },
+  removerAcesso: { color: '#dc2626', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  okAcesso: { color: '#16a34a', marginBottom: 12, fontWeight: '600' },
 });

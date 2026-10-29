@@ -8,6 +8,7 @@ use App\Models\Tanque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class AbastecimentoController extends Controller
@@ -19,7 +20,8 @@ class AbastecimentoController extends Controller
     // Filtros opcionais: busca (placa ou motorista), tanque_id, dias (7, 30 ou 90) e pagina.
     public function index(Request $request): JsonResponse
     {
-        $query = Abastecimento::query();
+        // A lista do admin mostra só o que já foi aprovado (os pendentes ficam em Aprovações).
+        $query = Abastecimento::query()->where('status', 'aprovado');
 
         $busca = trim((string) $request->query('busca', ''));
         if ($busca !== '') {
@@ -51,6 +53,7 @@ class AbastecimentoController extends Controller
 
             // Quilometragem do abastecimento anterior do mesmo caminhão (base do cálculo de consumo).
             $kmAnterior = Abastecimento::where('caminhao_id', $a->caminhao_id)
+                ->where('status', 'aprovado')
                 ->where(function ($q) use ($a, $data) {
                     $q->where('data', '<', $data)
                       ->orWhere(fn ($q2) => $q2->where('data', $data)->where('id', '<', $a->id));
@@ -76,6 +79,11 @@ class AbastecimentoController extends Controller
                 'caminhao'     => $a->caminhao,
                 'motorista'    => $a->motorista,
                 'tanque'       => $a->tanque,
+                'origem'       => $a->origem,
+                'posto'        => $a->posto,
+                'nota_numero'  => $a->nota_numero,
+                'valor_total'  => $a->valor_total !== null ? (float) $a->valor_total : null,
+                'foto_url'     => $a->fotoUrl(),
             ];
         });
 
@@ -183,6 +191,16 @@ class AbastecimentoController extends Controller
     public function destroy(Abastecimento $abastecimento): JsonResponse
     {
         DB::transaction(function () use ($abastecimento) {
+            // Abastecimento fora da base (ou ainda não aprovado) nunca mexeu em tanque: só apaga.
+            if (! $abastecimento->tanque_id || $abastecimento->status !== 'aprovado') {
+                if ($abastecimento->foto) {
+                    Storage::disk('local')->delete($abastecimento->foto);
+                }
+                $abastecimento->delete();
+
+                return;
+            }
+
             $tanque = Tanque::lockForUpdate()->findOrFail($abastecimento->tanque_id);
 
             // Nunca passa da capacidade do tanque (ele pode ter sido reabastecido depois).
@@ -204,6 +222,6 @@ class AbastecimentoController extends Controller
             $abastecimento->delete();
         });
 
-        return response()->json(['message' => 'Abastecimento excluído e litros devolvidos ao tanque.']);
+        return response()->json(['message' => 'Abastecimento excluído.']);
     }
 }

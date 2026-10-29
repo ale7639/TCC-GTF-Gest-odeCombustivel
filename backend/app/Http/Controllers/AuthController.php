@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\LogAcesso;
+use App\Models\Motorista;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,6 +44,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'E-mail ou senha inválidos.'], 401);
         }
 
+        // Motorista com cadastro inativo não entra.
+        if ($usuario->perfil === 'motorista') {
+            $motorista = Motorista::find($usuario->motorista_id);
+
+            if (! $motorista || ! $motorista->ativo) {
+                $this->registrar($request, $usuario->email, 'login', false, $usuario->id, 'Motorista inativo');
+
+                return response()->json(['message' => 'Seu acesso está desativado. Fale com o administrador.'], 403);
+            }
+        }
+
         $this->registrar($request, $usuario->email, 'login', true, $usuario->id);
 
         return response()->json([
@@ -51,6 +63,7 @@ class AuthController extends Controller
                 'id'    => $usuario->id,
                 'nome'  => $usuario->name,
                 'email' => $usuario->email,
+                'perfil' => $usuario->perfil ?? 'admin',
             ],
         ]);
     }

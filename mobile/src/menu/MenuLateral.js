@@ -15,6 +15,7 @@ const ITENS = [
   { rota: 'Motoristas', rotulo: 'Gestão de motoristas', icone: 'account-group-outline' },
   { rota: 'Tanques', rotulo: 'Gestão de tanques', icone: 'water-outline' },
   { rota: 'Abastecimentos', rotulo: 'Abastecimentos', icone: 'gas-station-outline' },
+  { rota: 'Aprovacoes', rotulo: 'Aprovações', icone: 'clipboard-check-outline' },
   { secao: 'Relatórios' },
   { rota: 'RelatorioAbastecimentos', rotulo: 'Abastecimentos', icone: 'chart-box-outline' },
   { rota: 'RelatorioMotoristas', rotulo: 'Motoristas', icone: 'account-details-outline' },

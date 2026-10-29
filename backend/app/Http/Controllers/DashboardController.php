@@ -7,6 +7,7 @@ use App\Models\EntradaCombustivel;
 use App\Models\Manutencao;
 use App\Models\NotaFiscal;
 use App\Models\Tanque;
+use App\Support\Lancamentos;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -50,7 +51,8 @@ class DashboardController extends Controller
             : $tanques->values();
 
         // Os 5 abastecimentos mais recentes. O with() traz caminhão, motorista e tanque numa consulta só.
-        $ultimosAbastecimentos = Abastecimento::with(['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'])
+        $ultimosAbastecimentos = Abastecimento::where('status', 'aprovado')
+            ->with(['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'])
             ->orderByDesc('data')
             ->orderByDesc('id')
             ->limit(5)
@@ -61,7 +63,7 @@ class DashboardController extends Controller
                 'litros'    => (float) $a->litros,
                 'placa'     => $a->caminhao->placa,
                 'motorista' => $a->motorista->nome,
-                'tanque'    => $a->tanque->nome,
+                'tanque'    => $a->tanque?->nome ?? 'Fora da base',
             ]);
 
         // As 5 notas fiscais mais recentes, com o que cada uma comprou.
@@ -96,11 +98,15 @@ class DashboardController extends Controller
             'dias' => $dias,
 
             // Totais do período escolhido.
-            'litros_abastecidos'  => (float) Abastecimento::where('data', '>=', $inicio)->sum('litros'),
+            'litros_abastecidos'  => (float) Abastecimento::where('status', 'aprovado')->where('data', '>=', $inicio)->sum('litros'),
             'litros_comprados'    => (float) EntradaCombustivel::where('data', '>=', $inicio)->sum('litros'),
-            'gasto_combustivel'   => (float) EntradaCombustivel::where('data', '>=', $inicio)->sum('valor_total'),
-            'gasto_manutencao'    => (float) Manutencao::where('data', '>=', $inicio)->sum('valor'),
+            // Compras para os tanques + o que foi pago em postos fora da base (já aprovado).
+            'gasto_combustivel'   => (float) EntradaCombustivel::where('data', '>=', $inicio)->sum('valor_total')
+                + (float) Abastecimento::where('status', 'aprovado')->where('origem', 'externo')
+                    ->where('data', '>=', $inicio)->sum('valor_total'),
+            'gasto_manutencao'    => (float) Manutencao::where('status', 'aprovado')->where('data', '>=', $inicio)->sum('valor'),
 
+            'pendentes'              => Lancamentos::contarPendentes(),
             'tanque_principal'       => $principal,
             'outros_tanques'         => $outros,
             'ultimos_abastecimentos' => $ultimosAbastecimentos,

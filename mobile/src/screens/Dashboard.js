@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
 
@@ -69,6 +69,7 @@ function NivelTanque({ tanque, destaque }) {
 }
 
 export default function Dashboard() {
+  const navegacao = useNavigation();
   const [dias, setDias] = useState(30);                  // período escolhido no filtro
   const [dados, setDados] = useState(null);              // resposta da API
   const [erro, setErro] = useState(null);                // mensagem de erro, se houver
@@ -126,6 +127,14 @@ export default function Dashboard() {
 
       {dados && (
         <>
+          {dados.pendentes > 0 && (
+            <Pressable style={styles.pendencias} onPress={() => navegacao.navigate('Aprovacoes')}>
+              <Text style={styles.pendenciasTexto}>
+                {dados.pendentes} {dados.pendentes === 1 ? 'lançamento aguarda' : 'lançamentos aguardam'} aprovação · Ver
+              </Text>
+            </Pressable>
+          )}
+
           <View style={styles.linha}>
             <Cartao titulo={`Litros abastecidos (${dados.dias} dias)`} valor={numero(dados.litros_abastecidos)} />
             <Cartao titulo={`Litros comprados (${dados.dias} dias)`} valor={numero(dados.litros_comprados)} />
@@ -212,6 +221,8 @@ const styles = StyleSheet.create({
   periodoAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   periodoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
+  pendencias: { backgroundColor: '#fef3c7', borderRadius: 12, padding: 12, marginBottom: 8 },
+  pendenciasTexto: { color: '#92400e', fontWeight: '600', fontSize: 14 },
   vazio: { color: '#6b7280', marginBottom: 8 },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: {

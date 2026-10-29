@@ -21,7 +21,8 @@ class RelatorioController extends Controller
             $dias = 30;
         }
 
-        $abastecimentos = Abastecimento::with(['caminhao:id,placa,modelo', 'tanque:id,nome'])
+        $abastecimentos = Abastecimento::where('status', 'aprovado')
+            ->with(['caminhao:id,placa,modelo', 'tanque:id,nome'])
             ->when($dias > 0, fn ($q) => $q->where('data', '>=', now()->subDays($dias)->toDateString()))
             ->orderBy('data')
             ->orderBy('id')
@@ -51,7 +52,7 @@ class RelatorioController extends Controller
         })->sortByDesc('litros')->values();
 
         // Por tanque: quanto saiu de cada um.
-        $porTanque = $abastecimentos->groupBy('tanque_id')->map(fn ($itens) => [
+        $porTanque = $abastecimentos->whereNotNull('tanque_id')->groupBy('tanque_id')->map(fn ($itens) => [
             'tanque_id'      => $itens->first()->tanque_id,
             'nome'           => $itens->first()->tanque->nome,
             'abastecimentos' => $itens->count(),
@@ -83,7 +84,8 @@ class RelatorioController extends Controller
         }
         $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
 
-        $abastecimentos = Abastecimento::with('caminhao:id,placa')
+        $abastecimentos = Abastecimento::where('status', 'aprovado')
+            ->with('caminhao:id,placa')
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
             ->orderBy('data')->orderBy('id')
             ->get()
@@ -91,11 +93,11 @@ class RelatorioController extends Controller
 
         // Lavagens: só filtra por data se a coluna "data" existir na tabela.
         $filtraLavagem = $inicio && Schema::hasColumn('lavagens', 'data');
-        $lavagens = Lavagem::query()
+        $lavagens = Lavagem::query()->where('status', 'aprovado')
             ->when($filtraLavagem, fn ($q) => $q->where('data', '>=', $inicio))
             ->get()->groupBy('motorista_id');
 
-        $manutencoes = Manutencao::query()
+        $manutencoes = Manutencao::query()->where('status', 'aprovado')
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
             ->get()->groupBy('motorista_id');
 

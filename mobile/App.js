@@ -15,6 +15,8 @@ import Tanques from './src/screens/Tanques';
 import RelatorioAbastecimentos from './src/screens/RelatorioAbastecimentos';
 import RelatorioMotoristas from './src/screens/RelatorioMotoristas';
 import LogAcesso from './src/screens/LogAcesso';
+import Aprovacoes from './src/screens/Aprovacoes';
+import AreaMotorista from './src/screens/AreaMotorista';
 
 const Tab = createBottomTabNavigator();
 
@@ -23,7 +25,7 @@ const navegacao = createNavigationContainerRef();
 
 // Decide o que mostrar: carregando, login (sem sessão) ou o app com o menu lateral (com sessão).
 function Rotas() {
-  const { token, carregando } = useAuth();
+  const { token, carregando, usuario } = useAuth();
   const [rotaAtual, setRotaAtual] = useState('Painel'); // para destacar a tela atual no menu
 
   if (carregando) {
@@ -35,6 +37,9 @@ function Rotas() {
   }
 
   if (!token) return <Login />;
+
+  // Motorista vê só a própria área (sem menu de gestão). Qualquer outro perfil é administrador.
+  if (usuario?.perfil === 'motorista') return <AreaMotorista />;
 
   return (
     <NavigationContainer
@@ -52,6 +57,7 @@ function Rotas() {
             <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
             <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
             <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
+            <Tab.Screen name="Aprovacoes" component={Aprovacoes} />
             <Tab.Screen name="LogAcesso" component={LogAcesso} />
           </Tab.Navigator>
 
