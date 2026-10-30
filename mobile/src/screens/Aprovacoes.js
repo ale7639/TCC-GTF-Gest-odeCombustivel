@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { linkWhatsApp } from '../utils/formatos';
 
 const mensagemDe = (e) =>
   e.name === 'AbortError' || e.message === 'Network request failed'
@@ -134,6 +136,22 @@ export default function Aprovacoes() {
                 </Text>
               ))}
 
+              {linkWhatsApp(item.telefone) && (
+                <Pressable
+                  style={styles.whats}
+                  onPress={() =>
+                    Linking.openURL(
+                      linkWhatsApp(
+                        item.telefone,
+                        `Olá, ${item.motorista.split(' ')[0]}! Sobre o lançamento "${item.titulo}" do caminhão ${item.placa} em ${item.data_br}: `
+                      )
+                    )
+                  }
+                >
+                  <Text style={styles.whatsTexto}>Falar com o motorista no WhatsApp</Text>
+                </Pressable>
+              )}
+
               {item.foto_url && (
                 <Image source={{ uri: item.foto_url }} style={styles.foto} resizeMode="cover" />
               )}
@@ -238,6 +256,15 @@ const styles = StyleSheet.create({
   confirmarRecusa: { flex: 1, backgroundColor: '#dc2626', borderRadius: 8, padding: 11, alignItems: 'center' },
   cancelarTexto: { color: '#374151', fontWeight: '600', fontSize: 15 },
   desativado: { opacity: 0.6 },
+  whats: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  whatsTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
   campo: {
     backgroundColor: '#f9fafb',
     borderWidth: 1,

@@ -174,6 +174,14 @@ class MotoristaController extends Controller
             }
         }
 
+        // Telefone (celular com WhatsApp): grava como "44 98751-3965".
+        if ($request->filled('telefone')) {
+            $d = preg_replace('/\D/', '', $request->input('telefone'));
+            if (strlen($d) === 11) {
+                $request->merge(['telefone' => substr($d, 0, 2) . ' ' . substr($d, 2, 5) . '-' . substr($d, 7, 4)]);
+            }
+        }
+
         // CNH: guarda só os números (o número de registro da CNH tem 11 dígitos).
         if ($request->filled('cnh')) {
             $request->merge(['cnh' => preg_replace('/\D/', '', $request->input('cnh'))]);
@@ -189,7 +197,7 @@ class MotoristaController extends Controller
                 Rule::unique('motoristas', 'cpf')->ignore($motorista?->id),
             ],
             'cnh'      => ['required', 'digits:11'],
-            'telefone' => ['nullable', 'string', 'max:20'],
+            'telefone' => ['required', 'regex:/^\d{2} 9\d{4}-\d{4}$/'],
             'ativo'    => ['required', 'boolean'],
             'caminhao_id' => [
                 'nullable', 'integer', 'exists:caminhoes,id',
@@ -215,6 +223,7 @@ class MotoristaController extends Controller
             'cpf.unique'         => 'Já existe um motorista com este CPF.',
             'cpf.regex'          => 'CPF inválido. Use o formato 000.000.000-00.',
             'cnh.digits'         => 'A CNH deve ter 11 números.',
+            'telefone.regex'     => 'Telefone inválido. Use DDD + celular, ex.: 44 98751-3965.',
             'acesso_email.email' => 'E-mail de acesso inválido.',
             'acesso_email.unique'=> 'Este e-mail de acesso já está em uso.',
             'acesso_senha.required' => 'Defina uma senha para criar o acesso do motorista.',

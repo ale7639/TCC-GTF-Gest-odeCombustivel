@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import { mascaraCPF, somenteDigitos } from '../utils/formatos';
+import { linkWhatsApp, mascaraCPF, mascaraTelefone, somenteDigitos } from '../utils/formatos';
 
 // Mensagem amigável para qualquer erro de comunicação com a API.
 const mensagemDe = (e) =>
@@ -166,6 +167,10 @@ export default function Motoristas() {
       setErroForm('CPF incompleto. Exemplo: 096.668.979-89');
       return;
     }
+    if (somenteDigitos(form.telefone).length !== 11) {
+      setErroForm('Informe o celular com DDD. Exemplo: 44 98751-3965');
+      return;
+    }
     if (somenteDigitos(form.cnh).length !== 11) {
       setErroForm('A CNH deve ter 11 números.');
       return;
@@ -179,7 +184,7 @@ export default function Motoristas() {
       nome: form.nome.trim(),
       cpf: form.cpf.trim(),
       cnh: form.cnh.trim(),
-      telefone: form.telefone.trim() || null,
+      telefone: form.telefone.trim(),
       ativo: form.ativo,
       caminhao_id: form.caminhao_id,
       acesso_email: form.acesso_email.trim() || null,
@@ -286,6 +291,14 @@ export default function Motoristas() {
               CPF {item.cpf} · CNH {item.cnh}
             </Text>
             {item.telefone ? <Text style={styles.detalhe}>{item.telefone}</Text> : null}
+            {linkWhatsApp(item.telefone) && (
+              <Pressable
+                style={styles.whats}
+                onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
+              >
+                <Text style={styles.whatsTexto}>Conversar no WhatsApp</Text>
+              </Pressable>
+            )}
             <Text style={styles.detalhe}>
               Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
             </Text>
@@ -321,11 +334,12 @@ export default function Motoristas() {
             maxLength={11}
           />
           <Campo
-            rotulo="Telefone (opcional)"
+            rotulo="Celular com WhatsApp (DDD + número)"
+            placeholder="Ex.: 44 98751-3965"
             value={form.telefone}
-            onChangeText={(v) => mudar('telefone', v)}
+            onChangeText={(v) => mudar('telefone', mascaraTelefone(v))}
             keyboardType="phone-pad"
-            maxLength={20}
+            maxLength={14}
           />
 
           <Text style={styles.rotulo}>Situação</Text>
@@ -486,4 +500,13 @@ const styles = StyleSheet.create({
   botaoAcessoTexto: { color: '#2563eb', fontSize: 15, fontWeight: '600' },
   removerAcesso: { color: '#dc2626', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   okAcesso: { color: '#16a34a', marginBottom: 12, fontWeight: '600' },
+  whats: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  whatsTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });

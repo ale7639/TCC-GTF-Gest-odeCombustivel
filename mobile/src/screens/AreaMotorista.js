@@ -229,25 +229,20 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
 }
 
 // ---------- Lavagem ----------
+// Feita na própria empresa: sem custo, só a data em que o caminhão foi lavado.
 function FormLavagem({ aoFechar, aoEnviado }) {
-  const [f, setF] = useState({ data: hoje(), valor: '', observacao: '' });
+  const [data, setData] = useState(hoje());
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
-  const mudar = (campo, valor) => setF((atual) => ({ ...atual, [campo]: valor }));
 
   const enviar = async () => {
-    const valor = moedaParaNumero(f.valor);
-    const data = paraISO(f.data);
-    if (!data) return setErro('Informe a data no formato dd/mm/aaaa.');
-    if (f.valor === '' || Number.isNaN(valor) || valor < 0) return setErro('Informe o valor da lavagem.');
+    const iso = paraISO(data);
+    if (!iso) return setErro('Informe a data no formato dd/mm/aaaa.');
 
     setEnviando(true);
     setErro(null);
     try {
-      const r = await api('/meu/lavagens', {
-        metodo: 'POST',
-        corpo: { data, valor, observacao: f.observacao.trim() || null },
-      });
+      const r = await api('/meu/lavagens', { metodo: 'POST', corpo: { data: iso } });
       aoEnviado(r.message);
     } catch (e) {
       setErro(mensagemDe(e));
@@ -258,15 +253,7 @@ function FormLavagem({ aoFechar, aoEnviado }) {
 
   return (
     <Formulario titulo="Nova lavagem" visivel aoFechar={aoFechar} aoEnviar={enviar} enviando={enviando} erro={erro}>
-      <Campo rotulo="Data (dd/mm/aaaa)" value={f.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
-      <Campo
-        rotulo="Valor"
-        placeholder="R$ 0,00"
-        value={f.valor}
-        onChangeText={(v) => mudar('valor', mascaraMoeda(v))}
-        keyboardType="numeric"
-      />
-      <Campo rotulo="Observação (opcional)" value={f.observacao} onChangeText={(v) => mudar('observacao', v)} />
+      <Campo rotulo="Data da lavagem (dd/mm/aaaa)" value={data} onChangeText={setData} maxLength={10} />
     </Formulario>
   );
 }

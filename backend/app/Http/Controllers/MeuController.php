@@ -137,9 +137,9 @@ class MeuController extends Controller
         $motorista = $request->attributes->get('motorista');
         $caminhao  = $this->caminhaoDe($motorista);
 
+        // Lavagem é feita na própria empresa: sem custo, só a data (observação é opcional).
         $dados = $request->validate([
             'data'       => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
-            'valor'      => ['required', 'numeric', 'min:0', 'max:999999'],
             'observacao' => ['nullable', 'string', 'max:255'],
         ], [
             'required'             => 'Preencha o campo :attribute.',
@@ -151,7 +151,7 @@ class MeuController extends Controller
             'caminhao_id'  => $caminhao->id,
             'motorista_id' => $motorista->id,
             'data'         => $dados['data'],
-            'valor'        => $dados['valor'],
+            'valor'        => null,
             'observacao'   => $dados['observacao'] ?? null,
             'status'       => 'aprovado', // lavagem não mexe em estoque: vale na hora, sem aprovação
         ]);

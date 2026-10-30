@@ -35,3 +35,19 @@ export const moedaParaNumero = (texto) => {
 
 // Número -> texto já mascarado, para preencher um formulário de edição. 8.9 -> "R$ 8,90"
 export const numeroParaMascara = (n) => (n == null || n === '' ? '' : moeda(n));
+
+// Celular enquanto digita: "44987513965" -> "44 98751-3965"
+export const mascaraTelefone = (texto) => {
+  const d = somenteDigitos(texto).slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `${d.slice(0, 2)} ${d.slice(2)}`;
+  return `${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+
+// Link do WhatsApp (abre a conversa no app ou no WhatsApp Web), com mensagem opcional.
+// "44 98751-3965" -> "https://wa.me/5544987513965?text=..."
+export const linkWhatsApp = (telefone, mensagem = '') => {
+  const d = somenteDigitos(telefone);
+  if (d.length !== 11) return null;
+  return `https://wa.me/55${d}` + (mensagem ? `?text=${encodeURIComponent(mensagem)}` : '');
+};

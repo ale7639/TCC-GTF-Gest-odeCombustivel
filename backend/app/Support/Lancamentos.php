@@ -30,7 +30,8 @@ class Lancamentos
     {
         return [
             'placas'  => Caminhao::pluck('placa', 'id')->all(),
-            'nomes'   => Motorista::pluck('nome', 'id')->all(),
+            'nomes'     => Motorista::pluck('nome', 'id')->all(),
+            'telefones' => Motorista::pluck('telefone', 'id')->all(),
             'tanques' => Tanque::pluck('nome', 'id')->all(),
         ];
     }
@@ -72,7 +73,8 @@ class Lancamentos
                 ($externo && $m->nota_numero) ? 'NF ' . $m->nota_numero : null,
             ]));
         } elseif ($tipo === 'lavagem') {
-            $titulo = 'Lavagem · ' . self::moeda($m->valor);
+            // Lavagens antigas podem ter valor; as novas (feitas na empresa) não têm.
+            $titulo = 'Lavagem' . ($m->valor > 0 ? ' · ' . self::moeda($m->valor) : '');
             $linhas = array_values(array_filter([$m->observacao]));
         } else {
             $titulo = 'Manutenção · ' . $m->tipo . ' · ' . self::moeda($m->valor);
@@ -88,6 +90,7 @@ class Lancamentos
             'data_br'       => $data->format('d/m/Y'),
             'placa'         => $mapas['placas'][$m->caminhao_id] ?? '—',
             'motorista'     => $mapas['nomes'][$m->motorista_id] ?? '—',
+            'telefone'      => $mapas['telefones'][$m->motorista_id] ?? null,
             'titulo'        => $titulo,
             'linhas'        => $linhas,
             'foto_url'      => $tipo === 'abastecimento' ? $m->fotoUrl() : null,
