@@ -16,6 +16,7 @@ import RelatorioAbastecimentos from './src/screens/RelatorioAbastecimentos';
 import RelatorioMotoristas from './src/screens/RelatorioMotoristas';
 import LogAcesso from './src/screens/LogAcesso';
 import Aprovacoes from './src/screens/Aprovacoes';
+import Servicos from './src/screens/Servicos';
 import AreaMotorista from './src/screens/AreaMotorista';
 
 const Tab = createBottomTabNavigator();
@@ -57,6 +58,7 @@ function Rotas() {
             <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
             <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
             <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
+            <Tab.Screen name="Servicos" component={Servicos} />
             <Tab.Screen name="Aprovacoes" component={Aprovacoes} />
             <Tab.Screen name="LogAcesso" component={LogAcesso} />
           </Tab.Navigator>

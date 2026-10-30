@@ -6,7 +6,9 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CaminhaoController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EntradaCombustivelController;
+use App\Http\Controllers\LavagemController;
 use App\Http\Controllers\LogAcessoController;
+use App\Http\Controllers\ManutencaoController;
 use App\Http\Controllers\MeuController;
 use App\Http\Controllers\MotoristaController;
 use App\Http\Controllers\RelatorioController;
@@ -56,6 +58,14 @@ Route::middleware('auth:sanctum')->group(function () {
         // Entradas de combustível (compras com nota fiscal): só listar, registrar e excluir.
         Route::apiResource('entradas', EntradaCombustivelController::class)
             ->only(['index', 'store', 'destroy']);
+
+        // Lavagens e manutenções: listar, registrar e excluir.
+        Route::get('/lavagens', [LavagemController::class, 'index']);
+        Route::post('/lavagens', [LavagemController::class, 'store']);
+        Route::delete('/lavagens/{id}', [LavagemController::class, 'destroy'])->whereNumber('id');
+        Route::get('/manutencoes', [ManutencaoController::class, 'index']);
+        Route::post('/manutencoes', [ManutencaoController::class, 'store']);
+        Route::delete('/manutencoes/{id}', [ManutencaoController::class, 'destroy'])->whereNumber('id');
 
         // Aprovação dos lançamentos feitos pelos motoristas.
         Route::get('/aprovacoes', [AprovacaoController::class, 'index']);
