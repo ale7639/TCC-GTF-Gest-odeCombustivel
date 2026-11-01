@@ -11,6 +11,7 @@ use App\Http\Controllers\LogAcessoController;
 use App\Http\Controllers\ManutencaoController;
 use App\Http\Controllers\MeuController;
 use App\Http\Controllers\MotoristaController;
+use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\TanqueController;
 use App\Http\Middleware\ApenasAdmin;
@@ -77,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Relatórios.
         Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);
         Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
+        Route::get('/notas-fiscais', [NotaFiscalController::class, 'index']);
 
         // Log de acesso (quem entrou, quando e de onde).
         Route::get('/logs-acesso', [LogAcessoController::class, 'index']);
