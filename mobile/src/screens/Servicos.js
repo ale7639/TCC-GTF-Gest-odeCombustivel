@@ -50,6 +50,9 @@ const formVazio = () => ({
   descricao: '',
   valor: '',
   km: '',
+  nf_numero: '',
+  nf_fornecedor: '',
+  nf_chave_acesso: '',
 });
 
 function Campo({ rotulo, ...props }) {
@@ -171,6 +174,10 @@ export default function Servicos() {
         descricao: form.descricao.trim() || null,
         valor,
         km,
+        // Nota fiscal (opcional): vazio vira null.
+        nf_numero: form.nf_numero.trim() || null,
+        nf_fornecedor: form.nf_fornecedor.trim() || null,
+        nf_chave_acesso: form.nf_chave_acesso.replace(/\D/g, '') || null,
       };
     } else {
       corpo = { caminhao_id: form.caminhao_id, data, observacao: form.observacao.trim() || null };
@@ -316,6 +323,7 @@ export default function Servicos() {
               </Text>
             )}
             {ehManutencao && item.descricao ? <Text style={styles.detalhe}>{item.descricao}</Text> : null}
+            {ehManutencao && item.nota ? <Text style={styles.detalhe}>NF {item.nota}</Text> : null}
             {!ehManutencao && item.observacao ? <Text style={styles.detalhe}>{item.observacao}</Text> : null}
           </View>
         )}
@@ -370,6 +378,26 @@ export default function Servicos() {
                 value={form.km}
                 onChangeText={(v) => mudar('km', v)}
                 keyboardType="numeric"
+              />
+
+              <Text style={styles.secaoForm}>Nota fiscal (opcional)</Text>
+              <Campo
+                rotulo="Número da nota"
+                value={form.nf_numero}
+                onChangeText={(v) => mudar('nf_numero', v)}
+                maxLength={20}
+              />
+              <Campo
+                rotulo="Oficina / fornecedor"
+                value={form.nf_fornecedor}
+                onChangeText={(v) => mudar('nf_fornecedor', v)}
+              />
+              <Campo
+                rotulo="Chave de acesso (44 números, opcional)"
+                value={form.nf_chave_acesso}
+                onChangeText={(v) => mudar('nf_chave_acesso', v.replace(/\D/g, '').slice(0, 44))}
+                keyboardType="numeric"
+                maxLength={44}
               />
             </>
           ) : (
@@ -444,6 +472,7 @@ const styles = StyleSheet.create({
   opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
+  secaoForm: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 4, marginBottom: 10 },
   botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },

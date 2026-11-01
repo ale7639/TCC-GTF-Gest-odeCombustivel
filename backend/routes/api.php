@@ -79,6 +79,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);
         Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
         Route::get('/notas-fiscais', [NotaFiscalController::class, 'index']);
+        Route::post('/notas-fiscais', [NotaFiscalController::class, 'store']);
+        Route::delete('/notas-fiscais/{id}', [NotaFiscalController::class, 'destroy'])->whereNumber('id');
 
         // Log de acesso (quem entrou, quando e de onde).
         Route::get('/logs-acesso', [LogAcessoController::class, 'index']);

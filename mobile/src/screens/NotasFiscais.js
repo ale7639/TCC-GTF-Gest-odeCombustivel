@@ -3,8 +3,10 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,7 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import { moeda } from '../utils/formatos';
+import { mascaraMoeda, moeda, moedaParaNumero } from '../utils/formatos';
 
 const PERIODOS = [
   [7, '7 dias'],
@@ -23,9 +25,45 @@ const PERIODOS = [
 ];
 const ORIGENS = [
   ['todas', 'Todas'],
-  ['compra', 'Compras (tanque)'],
+  ['compra', 'Notas da empresa'],
   ['posto', 'Postos'],
 ];
+
+const CATEGORIAS = ['Compra de veículo', 'Peças', 'Pneus', 'Serviços', 'Outros'];
+
+// A tela mostra a data como dd/mm/aaaa; a API recebe aaaa-mm-dd.
+const hoje = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+const paraISO = (texto) => {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto.trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+};
+const mensagemDe = (e) =>
+  e.name === 'AbortError' || e.message === 'Network request failed'
+    ? 'Não foi possível conectar ao servidor.'
+    : e.message;
+
+const formVazio = () => ({
+  categoria: 'Peças',
+  numero: '',
+  fornecedor: '',
+  data: hoje(),
+  valor: '',
+  descricao: '',
+  chave_acesso: '',
+  caminhao_id: null,
+});
+
+function Campo({ rotulo, ...props }) {
+  return (
+    <View style={styles.grupo}>
+      <Text style={styles.rotulo}>{rotulo}</Text>
+      <TextInput style={styles.campo} {...props} />
+    </View>
+  );
+}
 
 function Chip({ texto, ativo, aoTocar }) {
   return (
@@ -60,6 +98,14 @@ export default function NotasFiscais() {
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [confirmando, setConfirmando] = useState(null); // nota aguardando o segundo toque para excluir
+
+  const [caminhoes, setCaminhoes] = useState([]);
+  const [formAberto, setFormAberto] = useState(false);
+  const [form, setForm] = useState(formVazio());
+  const [salvando, setSalvando] = useState(false);
+  const [erroForm, setErroForm] = useState(null);
+  const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
   useEffect(() => {
     const timer = setTimeout(() => setBuscaAplicada(busca.trim()), 400);
@@ -90,8 +136,65 @@ export default function NotasFiscais() {
   useFocusEffect(
     useCallback(() => {
       carregar(1);
+      api('/caminhoes').then(setCaminhoes).catch(() => {});
     }, [carregar])
   );
+
+  const abrirNovo = () => {
+    setForm(formVazio());
+    setErroForm(null);
+    setFormAberto(true);
+  };
+
+  const salvar = async () => {
+    const valor = moedaParaNumero(form.valor);
+    const data = paraISO(form.data);
+    if (!form.numero.trim() || !form.fornecedor.trim()) return setErroForm('Informe o número e o fornecedor.');
+    if (!data) return setErroForm('Informe a data no formato dd/mm/aaaa.');
+    if (!(valor > 0)) return setErroForm('Informe o valor da nota.');
+    if (form.chave_acesso && form.chave_acesso.length !== 44) {
+      return setErroForm('A chave de acesso deve ter 44 números (ou deixe em branco).');
+    }
+
+    setSalvando(true);
+    setErroForm(null);
+    try {
+      await api('/notas-fiscais', {
+        metodo: 'POST',
+        corpo: {
+          categoria: form.categoria,
+          numero: form.numero.trim(),
+          fornecedor: form.fornecedor.trim(),
+          data_emissao: data,
+          valor_total: valor,
+          descricao: form.descricao.trim() || null,
+          chave_acesso: form.chave_acesso || null,
+          caminhao_id: form.caminhao_id,
+        },
+      });
+      setFormAberto(false);
+      await carregar(1);
+    } catch (e) {
+      setErroForm(mensagemDe(e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const excluir = async (item) => {
+    if (confirmando !== item.chave) {
+      setConfirmando(item.chave);
+      return;
+    }
+    try {
+      await api(`/notas-fiscais/${item.id}`, { metodo: 'DELETE' });
+      setConfirmando(null);
+      await carregar(1);
+    } catch (e) {
+      setErro(mensagemDe(e));
+      setConfirmando(null);
+    }
+  };
 
   const maiorFornecedor = dados?.por_fornecedor?.[0]?.valor ?? 0;
 
@@ -123,7 +226,7 @@ export default function NotasFiscais() {
             <Cartao titulo="Notas" valor={dados.total} />
           </View>
           <View style={styles.linha}>
-            <Cartao titulo="Compras para o tanque" valor={moeda(dados.compras)} />
+            <Cartao titulo="Notas da empresa" valor={moeda(dados.compras)} />
             <Cartao titulo="Postos (fora da base)" valor={moeda(dados.postos)} />
           </View>
 
@@ -162,7 +265,11 @@ export default function NotasFiscais() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="NOTAS FISCAIS" />
+      <Cabecalho titulo="NOTAS FISCAIS">
+        <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
+          <Text style={styles.botaoNovoTexto}>+ Nova nota</Text>
+        </Pressable>
+      </Cabecalho>
 
       {erro && <Text style={styles.erro}>{erro}</Text>}
       {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
@@ -214,7 +321,7 @@ export default function NotasFiscais() {
               </View>
               <Text style={styles.fornecedorItem}>{item.fornecedor}</Text>
               <Text style={styles.detalhe}>
-                {item.data_br} · {item.origem === 'posto' ? 'Posto' : 'Compra'}
+                {item.data_br} · {item.categoria}
               </Text>
               <Text style={styles.detalhe}>{item.descricao}</Text>
 
@@ -227,10 +334,79 @@ export default function NotasFiscais() {
               {!detalhes && (item.chave_acesso || item.foto_url) && (
                 <Text style={styles.verMais}>Toque para ver {item.foto_url ? 'a foto' : 'a chave de acesso'}</Text>
               )}
+              {item.pode_excluir && (
+                <Pressable onPress={() => excluir(item)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                  <Text style={[styles.excluir, confirmando === item.chave && { color: '#dc2626' }]}>
+                    {confirmando === item.chave ? 'Confirmar exclusão' : 'Excluir nota'}
+                  </Text>
+                </Pressable>
+              )}
             </Pressable>
           );
         }}
       />
+      <Modal visible={formAberto} animationType="slide" onRequestClose={() => setFormAberto(false)}>
+        <ScrollView style={styles.tela} contentContainerStyle={styles.formConteudo} keyboardShouldPersistTaps="handled">
+          <Text style={styles.titulo}>Nova nota fiscal</Text>
+          <Text style={styles.detalhe}>
+            Notas de combustível entram pelas Entradas do tanque; as de manutenção, no lançamento da manutenção.
+          </Text>
+
+          <Text style={[styles.rotulo, { marginTop: 12 }]}>Categoria</Text>
+          <View style={styles.chips}>
+            {CATEGORIAS.map((c) => (
+              <Chip key={c} texto={c} ativo={form.categoria === c} aoTocar={() => mudar('categoria', c)} />
+            ))}
+          </View>
+
+          <Campo rotulo="Número da nota" value={form.numero} onChangeText={(v) => mudar('numero', v)} maxLength={20} />
+          <Campo rotulo="Fornecedor" value={form.fornecedor} onChangeText={(v) => mudar('fornecedor', v)} />
+          <Campo
+            rotulo="Data de emissão (dd/mm/aaaa)"
+            value={form.data}
+            onChangeText={(v) => mudar('data', v)}
+            maxLength={10}
+          />
+          <Campo
+            rotulo="Valor"
+            placeholder="R$ 0,00"
+            value={form.valor}
+            onChangeText={(v) => mudar('valor', mascaraMoeda(v))}
+            keyboardType="numeric"
+          />
+          <Campo
+            rotulo="Descrição (opcional)"
+            placeholder="Ex.: Caminhão Volvo FH 540 0 km"
+            value={form.descricao}
+            onChangeText={(v) => mudar('descricao', v)}
+          />
+
+          <Text style={styles.rotulo}>Caminhão (opcional)</Text>
+          <View style={styles.chips}>
+            <Chip texto="Nenhum" ativo={form.caminhao_id === null} aoTocar={() => mudar('caminhao_id', null)} />
+            {caminhoes.map((c) => (
+              <Chip key={c.id} texto={c.placa} ativo={form.caminhao_id === c.id} aoTocar={() => mudar('caminhao_id', c.id)} />
+            ))}
+          </View>
+
+          <Campo
+            rotulo="Chave de acesso (44 números, opcional)"
+            value={form.chave_acesso}
+            onChangeText={(v) => mudar('chave_acesso', v.replace(/\D/g, '').slice(0, 44))}
+            keyboardType="numeric"
+            maxLength={44}
+          />
+
+          {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
+
+          <Pressable style={[styles.botao, salvando && { opacity: 0.6 }]} onPress={salvar} disabled={salvando}>
+            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Cadastrar nota</Text>}
+          </Pressable>
+          <Pressable style={styles.botaoSecundario} onPress={() => setFormAberto(false)} disabled={salvando}>
+            <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
+          </Pressable>
+        </ScrollView>
+      </Modal>
     </View>
   );
 }
@@ -272,4 +448,17 @@ const styles = StyleSheet.create({
   foto: { height: 220, borderRadius: 8, marginTop: 8, backgroundColor: '#e5e7eb' },
   maisBotao: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 4 },
   maisTexto: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 6 },
+  grupo: { marginBottom: 12 },
+  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  campo: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 12, fontSize: 16 },
+  erroForm: { color: '#dc2626', marginBottom: 12 },
+  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
+  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
 });

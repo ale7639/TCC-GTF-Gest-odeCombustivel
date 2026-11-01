@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Caminhao;
 use App\Models\Manutencao;
 use App\Models\Motorista;
+use App\Models\NotaFiscal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -27,6 +28,8 @@ class ManutencaoController extends Controller
 
         $placas = Caminhao::pluck('placa', 'id');
         $nomes  = Motorista::pluck('nome', 'id');
+        $notas  = NotaFiscal::whereIn('id', $pagina->getCollection()->pluck('nota_fiscal_id')->filter())
+            ->pluck('numero', 'id');
 
         return response()->json([
             'dados' => $pagina->getCollection()->map(fn ($m) => [
@@ -38,6 +41,7 @@ class ManutencaoController extends Controller
                 'descricao' => $m->descricao,
                 'valor'     => (float) $m->valor,
                 'km'        => (int) $m->km,
+                'nota'      => $m->nota_fiscal_id ? ($notas[$m->nota_fiscal_id] ?? null) : null,
             ])->values(),
             'pagina'        => $pagina->currentPage(),
             'ultima_pagina' => $pagina->lastPage(),
@@ -56,15 +60,37 @@ class ManutencaoController extends Controller
             'descricao'   => ['nullable', 'string', 'max:1000'],
             'valor'       => ['required', 'numeric', 'min:0', 'max:9999999'],
             'km'          => ['required', 'integer', 'min:0'],
+            // Nota fiscal da oficina (opcional).
+            'nf_numero'       => ['nullable', 'required_with:nf_chave_acesso', 'string', 'max:20'],
+            'nf_fornecedor'   => ['nullable', 'required_with:nf_numero', 'string', 'max:255'],
+            'nf_chave_acesso' => ['nullable', 'digits:44', 'unique:notas_fiscais,chave_acesso'],
         ], [
-            'required'             => 'Preencha o campo :attribute.',
-            'data.before_or_equal' => 'A data não pode ser futura.',
+            'required'                    => 'Preencha o campo :attribute.',
+            'data.before_or_equal'        => 'A data não pode ser futura.',
+            'nf_numero.required_with'     => 'Informe o número da nota fiscal.',
+            'nf_fornecedor.required_with' => 'Informe a oficina/fornecedor da nota fiscal.',
+            'nf_chave_acesso.digits'      => 'A chave de acesso deve ter 44 números.',
+            'nf_chave_acesso.unique'      => 'Esta nota fiscal já foi cadastrada.',
         ], ['caminhao_id' => 'caminhão', 'descricao' => 'descrição', 'km' => 'quilometragem']);
 
         DB::transaction(function () use ($dados) {
             $caminhao = Caminhao::lockForUpdate()->findOrFail($dados['caminhao_id']);
             if (! $caminhao->motorista_id) {
                 throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não tem motorista responsável.']);
+            }
+
+            // Se veio nota fiscal, ela é criada e ligada à manutenção.
+            $notaId = null;
+            if (! empty($dados['nf_numero'])) {
+                $notaId = NotaFiscal::forceCreate([
+                    'numero'       => $dados['nf_numero'],
+                    'fornecedor'   => $dados['nf_fornecedor'],
+                    'data_emissao' => $dados['data'],
+                    'valor_total'  => $dados['valor'],
+                    'chave_acesso' => $dados['nf_chave_acesso'] ?? null,
+                    'categoria'    => 'Manutenção',
+                    'caminhao_id'  => $caminhao->id,
+                ])->id;
             }
 
             Manutencao::forceCreate([
@@ -75,6 +101,7 @@ class ManutencaoController extends Controller
                 'descricao'    => $dados['descricao'] ?? null,
                 'valor'        => $dados['valor'],
                 'km'           => $dados['km'],
+                'nota_fiscal_id' => $notaId,
                 'status'       => 'aprovado',
             ]);
 
@@ -88,7 +115,16 @@ class ManutencaoController extends Controller
     // DELETE /api/manutencoes/{id} — a quilometragem do caminhão não volta atrás.
     public function destroy(int $id): JsonResponse
     {
-        Manutencao::findOrFail($id)->delete();
+        DB::transaction(function () use ($id) {
+            $manutencao = Manutencao::findOrFail($id);
+            $notaId     = $manutencao->nota_fiscal_id;
+            $manutencao->delete();
+
+            // A nota que era só desta manutenção sai junto.
+            if ($notaId && ! Manutencao::where('nota_fiscal_id', $notaId)->exists()) {
+                NotaFiscal::whereKey($notaId)->whereDoesntHave('entradas')->delete();
+            }
+        });
 
         return response()->json(['message' => 'Manutenção excluída.']);
     }
