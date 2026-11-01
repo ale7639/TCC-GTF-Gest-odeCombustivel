@@ -24,7 +24,8 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 // Rota pública: confere e-mail e senha e devolve o token.
-Route::post('/login', [AuthController::class, 'login']);
+// throttle:5,1 = no máximo 5 tentativas por minuto (por IP), contra quem tenta adivinhar senhas.
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 // Foto de um abastecimento fora da base. Pública, mas só abre com o endereço assinado
 // (que a API entrega, por 2 horas, a quem tem permissão de ver o lançamento).

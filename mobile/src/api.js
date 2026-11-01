@@ -19,8 +19,9 @@ export async function api(caminho, { metodo = 'GET', corpo } = {}) {
   const controle = new AbortController();
   const timer = setTimeout(() => controle.abort(), ehFormulario ? 60000 : 8000);
 
+  let resposta;
   try {
-    const resposta = await fetch(`${API_URL}${caminho}`, {
+    resposta = await fetch(`${API_URL}${caminho}`, {
       method: metodo,
       headers: {
         Accept: 'application/json', // faz o Laravel responder sempre em JSON
@@ -31,15 +32,39 @@ export async function api(caminho, { metodo = 'GET', corpo } = {}) {
       body: corpo ? (ehFormulario ? corpo : JSON.stringify(corpo)) : undefined,
       signal: controle.signal,
     });
-
-    const json = await resposta.json().catch(() => null);
-
-    // 401 com token guardado = sessão não vale mais; volta para o login.
-    if (resposta.status === 401 && token) aoExpirar();
-
-    if (!resposta.ok) throw new Error(json?.message || `Erro ${resposta.status}`);
-    return json;
+  } catch (e) {
+    // Servidor desligado, sem internet ou demorou demais: mensagem clara em vez de erro técnico.
+    throw new Error(
+      e.name === 'AbortError'
+        ? 'O servidor demorou para responder. Tente novamente.'
+        : 'Não foi possível conectar ao servidor. Verifique se ele está ligado.'
+    );
   } finally {
     clearTimeout(timer);
   }
+
+  const json = await resposta.json().catch(() => null);
+
+  // 401 com token guardado = sessão expirou ou não vale mais; volta para o login.
+  if (resposta.status === 401 && token) {
+    aoExpirar();
+    throw new Error('Sua sessão expirou. Entre novamente.');
+  }
+
+  if (!resposta.ok) throw new Error(mensagemDeErro(resposta.status, json));
+  return json;
+}
+
+// Traduz o código de erro HTTP numa mensagem que o usuário entende.
+function mensagemDeErro(status, json) {
+  if (status === 429) return 'Muitas tentativas seguidas. Aguarde 1 minuto e tente novamente.';
+  if (status === 403) return json?.message || 'Você não tem permissão para fazer isso.';
+  if (status === 404) return 'Registro não encontrado. Ele pode ter sido excluído.';
+  if (status >= 500) return 'Erro interno no servidor. Tente novamente em instantes.';
+
+  // 422 (validação): mostra só a primeira mensagem, sem o "(e mais N erros)".
+  const erros = json?.errors ? Object.values(json.errors).flat() : [];
+  if (erros.length > 0) return erros[0];
+
+  return json?.message || `Erro ${status}`;
 }

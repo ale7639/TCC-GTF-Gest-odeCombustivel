@@ -312,10 +312,11 @@ export default function Caminhoes() {
           <Campo
             rotulo="Placa"
             value={form.placa}
-            onChangeText={(v) => mudar('placa', v)}
+            onChangeText={(v) => mudar('placa', v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7))}
+            placeholder="ABC1234 ou ABC1D23"
             autoCapitalize="characters"
             autoCorrect={false}
-            maxLength={8}
+            maxLength={7}
           />
           <Campo rotulo="Modelo" value={form.modelo} onChangeText={(v) => mudar('modelo', v)} />
           <Campo

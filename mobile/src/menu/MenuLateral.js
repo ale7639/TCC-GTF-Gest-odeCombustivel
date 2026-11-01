@@ -27,7 +27,7 @@ const ITENS = [
 
 // Menu que desliza da esquerda, aberto pelo botão de três risquinhos de cada tela.
 export default function MenuLateral({ navegacao, rotaAtual }) {
-  const { aberto, fechar } = useMenu();
+  const { aberto, fechar, fixo } = useMenu();
   const { usuario, sair } = useAuth();
   const progresso = useRef(new Animated.Value(0)).current; // 0 = fechado, 1 = aberto
   const [montado, setMontado] = useState(false);            // mantém o menu na tela durante a animação de fechar
@@ -44,7 +44,7 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
     }
   }, [aberto, progresso]);
 
-  if (!montado) return null;
+  if (!montado && !fixo) return null;
 
   const irPara = (rota) => {
     if (navegacao.isReady()) navegacao.navigate(rota);
@@ -55,6 +55,59 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
     fechar();
     sair();
   };
+
+  const conteudo = (
+    <>
+      <View style={styles.topo}>
+        <Text style={styles.marca}>GESTÃO DE FROTA</Text>
+        {usuario && (
+          <>
+            <Text style={styles.usuario}>{usuario.nome}</Text>
+            <Text style={styles.email}>{usuario.email}</Text>
+          </>
+        )}
+      </View>
+
+      <ScrollView style={styles.itens}>
+        {ITENS.map((item) => {
+          // Título de grupo (não é clicável).
+          if (item.secao) {
+            return (
+              <Text key={item.secao} style={styles.secao}>
+                {item.secao}
+              </Text>
+            );
+          }
+
+          const ativo = rotaAtual === item.rota;
+          return (
+            <Pressable
+              key={item.rota}
+              onPress={() => irPara(item.rota)}
+              style={[styles.item, ativo && styles.itemAtivo]}
+            >
+              <MaterialCommunityIcons
+                name={item.icone}
+                size={22}
+                color={ativo ? '#2563eb' : '#374151'}
+              />
+              <Text style={[styles.itemTexto, ativo && { color: '#2563eb' }]}>{item.rotulo}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <Pressable onPress={aoSair} style={styles.sair}>
+        <MaterialCommunityIcons name="logout" size={22} color="#dc2626" />
+        <Text style={styles.sairTexto}>Sair</Text>
+      </Pressable>
+    </>
+  );
+
+  // Computador: o menu é uma coluna fixa à esquerda, sempre visível.
+  if (fixo) {
+    return <View style={styles.fixo}>{conteudo}</View>;
+  }
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -69,49 +122,7 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
           { transform: [{ translateX: progresso.interpolate({ inputRange: [0, 1], outputRange: [-LARGURA, 0] }) }] },
         ]}
       >
-        <View style={styles.topo}>
-          <Text style={styles.marca}>GESTÃO DE FROTA</Text>
-          {usuario && (
-            <>
-              <Text style={styles.usuario}>{usuario.nome}</Text>
-              <Text style={styles.email}>{usuario.email}</Text>
-            </>
-          )}
-        </View>
-
-        <ScrollView style={styles.itens}>
-          {ITENS.map((item) => {
-            // Título de grupo (não é clicável).
-            if (item.secao) {
-              return (
-                <Text key={item.secao} style={styles.secao}>
-                  {item.secao}
-                </Text>
-              );
-            }
-
-            const ativo = rotaAtual === item.rota;
-            return (
-              <Pressable
-                key={item.rota}
-                onPress={() => irPara(item.rota)}
-                style={[styles.item, ativo && styles.itemAtivo]}
-              >
-                <MaterialCommunityIcons
-                  name={item.icone}
-                  size={22}
-                  color={ativo ? '#2563eb' : '#374151'}
-                />
-                <Text style={[styles.itemTexto, ativo && { color: '#2563eb' }]}>{item.rotulo}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <Pressable onPress={aoSair} style={styles.sair}>
-          <MaterialCommunityIcons name="logout" size={22} color="#dc2626" />
-          <Text style={styles.sairTexto}>Sair</Text>
-        </Pressable>
+        {conteudo}
       </Animated.View>
     </View>
   );
@@ -119,6 +130,15 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
 
 const styles = StyleSheet.create({
   fundo: { backgroundColor: 'rgba(0,0,0,0.4)' },
+  fixo: {
+    width: 260,
+    backgroundColor: '#fff',
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    paddingTop: 24,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
+  },
   painel: {
     position: 'absolute',
     top: 0,

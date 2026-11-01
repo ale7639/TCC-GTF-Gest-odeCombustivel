@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -25,10 +25,15 @@ const Tab = createBottomTabNavigator();
 // Permite navegar de fora das telas (o menu lateral usa isso).
 const navegacao = createNavigationContainerRef();
 
-// Decide o que mostrar: carregando, login (sem sessão) ou o app com o menu lateral (com sessão).
+// Tela larga (computador): menu lateral sempre visível. Tela estreita (celular): menu escondido no botão ☰.
+const LARGURA_MENU_FIXO = 900;
+
+// Decide o que mostrar: carregando, login (sem sessão), área do motorista ou o sistema do admin.
 function Rotas() {
   const { token, carregando, usuario } = useAuth();
   const [rotaAtual, setRotaAtual] = useState('Painel'); // para destacar a tela atual no menu
+  const { width } = useWindowDimensions();
+  const fixo = Platform.OS === 'web' && width >= LARGURA_MENU_FIXO;
 
   if (carregando) {
     return (
@@ -38,34 +43,53 @@ function Rotas() {
     );
   }
 
-  if (!token) return <Login />;
-
-  // Motorista vê só a própria área (sem menu de gestão). Qualquer outro perfil é administrador.
-  if (usuario?.perfil === 'motorista') return <AreaMotorista />;
+  // Login e área do motorista ficam numa coluna centralizada (formato de celular), mesmo no computador.
+  if (!token) {
+    return (
+      <View style={styles.coluna}>
+        <Login />
+      </View>
+    );
+  }
+  if (usuario?.perfil === 'motorista') {
+    return (
+      <View style={styles.coluna}>
+        <AreaMotorista />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer
       ref={navegacao}
       onStateChange={() => setRotaAtual(navegacao.getCurrentRoute()?.name ?? 'Painel')}
     >
-      <MenuProvider>
-        <View style={styles.raiz}>
-          {/* As abas continuam existindo por baixo, mas a barra de baixo fica escondida: a navegação é pelo menu. */}
-          <Tab.Navigator screenOptions={{ headerShown: false, tabBarStyle: { display: 'none' } }}>
-            <Tab.Screen name="Painel" component={Dashboard} />
-            <Tab.Screen name="Frota" component={Caminhoes} />
-            <Tab.Screen name="Motoristas" component={Motoristas} />
-            <Tab.Screen name="Tanques" component={Tanques} />
-            <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
-            <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
-            <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
-            <Tab.Screen name="NotasFiscais" component={NotasFiscais} />
-            <Tab.Screen name="Servicos" component={Servicos} />
-            <Tab.Screen name="Aprovacoes" component={Aprovacoes} />
-            <Tab.Screen name="LogAcesso" component={LogAcesso} />
-          </Tab.Navigator>
+      <MenuProvider fixo={fixo}>
+        <View style={[styles.raiz, fixo && { flexDirection: 'row' }]}>
+          {fixo && <MenuLateral navegacao={navegacao} rotaAtual={rotaAtual} />}
 
-          <MenuLateral navegacao={navegacao} rotaAtual={rotaAtual} />
+          <View style={styles.conteudo}>
+            {/* As abas existem por baixo, mas a barra de baixo fica escondida: a navegação é pelo menu.
+                sceneStyle limita a largura do conteúdo para não esticar demais em monitores grandes. */}
+            <Tab.Navigator
+              sceneContainerStyle={styles.cena}
+              screenOptions={{ headerShown: false, tabBarStyle: { display: 'none' }, sceneStyle: styles.cena }}
+            >
+              <Tab.Screen name="Painel" component={Dashboard} />
+              <Tab.Screen name="Frota" component={Caminhoes} />
+              <Tab.Screen name="Motoristas" component={Motoristas} />
+              <Tab.Screen name="Tanques" component={Tanques} />
+              <Tab.Screen name="Abastecimentos" component={Abastecimentos} />
+              <Tab.Screen name="Servicos" component={Servicos} />
+              <Tab.Screen name="Aprovacoes" component={Aprovacoes} />
+              <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
+              <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
+              <Tab.Screen name="NotasFiscais" component={NotasFiscais} />
+              <Tab.Screen name="LogAcesso" component={LogAcesso} />
+            </Tab.Navigator>
+          </View>
+
+          {!fixo && <MenuLateral navegacao={navegacao} rotaAtual={rotaAtual} />}
         </View>
       </MenuProvider>
     </NavigationContainer>
@@ -73,28 +97,21 @@ function Rotas() {
 }
 
 export default function App() {
-  // No navegador, o app fica numa coluna centralizada (como num celular), em vez de esticar na tela toda.
   return (
     <View style={styles.pagina}>
-      <View style={styles.app}>
-        <AuthProvider>
-          <Rotas />
-        </AuthProvider>
-      </View>
+      <AuthProvider>
+        <Rotas />
+      </AuthProvider>
       <StatusBar style="dark" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pagina: { flex: 1, backgroundColor: '#d1d5db' },
-  app: {
-    flex: 1,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 520 : undefined,
-    alignSelf: 'center',
-    backgroundColor: '#f3f4f6',
-  },
+  pagina: { flex: 1, backgroundColor: '#f3f4f6' },
+  coluna: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center' },
   raiz: { flex: 1 },
+  conteudo: { flex: 1 },
+  cena: { flex: 1, width: '100%', maxWidth: 1200, alignSelf: 'center', backgroundColor: '#f3f4f6' },
   centro: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

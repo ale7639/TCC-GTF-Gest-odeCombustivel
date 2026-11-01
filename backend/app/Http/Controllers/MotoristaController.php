@@ -160,6 +160,27 @@ class MotoristaController extends Controller
         }
     }
 
+    // Algoritmo oficial do CPF: os dois últimos dígitos são calculados a partir dos 9 primeiros.
+    public static function cpfValido(?string $cpf): bool
+    {
+        $d = preg_replace('/\D/', '', (string) $cpf);
+        if (strlen($d) !== 11 || preg_match('/^(\d)\1{10}$/', $d)) {
+            return false; // tamanho errado ou todos os dígitos iguais
+        }
+
+        for ($t = 9; $t < 11; $t++) {
+            $soma = 0;
+            for ($i = 0; $i < $t; $i++) {
+                $soma += (int) $d[$i] * (($t + 1) - $i);
+            }
+            if ((int) $d[$t] !== ((10 * $soma) % 11) % 10) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // Regras de validação, iguais para cadastrar e para alterar.
     private function validar(Request $request, ?Motorista $motorista = null): array
     {
@@ -194,6 +215,12 @@ class MotoristaController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'cpf'  => [
                 'required', 'string', 'regex:/^\d{3}\.\d{3}\.\d{3}-\d{2}$/',
+                // Confere os dois dígitos verificadores (recusa CPFs inventados, como 111.111.111-11).
+                function ($atributo, $valor, $falhar) {
+                    if (! self::cpfValido($valor)) {
+                        $falhar('CPF inválido. Confira os números digitados.');
+                    }
+                },
                 Rule::unique('motoristas', 'cpf')->ignore($motorista?->id),
             ],
             'cnh'      => ['required', 'digits:11'],
