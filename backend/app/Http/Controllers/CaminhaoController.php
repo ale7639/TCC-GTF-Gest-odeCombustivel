@@ -69,7 +69,7 @@ class CaminhaoController extends Controller
 
         return $request->validate([
             'placa' => [
-                'required', 'string', 'max:8',
+                'required', 'string', 'regex:/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/',
                 Rule::unique('caminhoes', 'placa')->ignore($caminhao?->id),
             ],
             'modelo'            => ['required', 'string', 'max:255'],
@@ -83,6 +83,7 @@ class CaminhaoController extends Controller
             ],
         ], [
             'placa.unique'        => 'Já existe um caminhão com esta placa.',
+            'placa.regex'         => 'Placa inválida. Use ABC1234 ou o padrão Mercosul ABC1D23.',
             'motorista_id.unique' => 'Este motorista já é responsável por outro caminhão.',
             'motorista_id.exists' => 'Motorista não encontrado.',
             'required'            => 'Preencha o campo :attribute.',

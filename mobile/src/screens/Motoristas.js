@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +14,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
+import { linkWhatsApp, mascaraCPF, mascaraTelefone, somenteDigitos } from '../utils/formatos';
 
 // Mensagem amigável para qualquer erro de comunicação com a API.
 const mensagemDe = (e) =>
@@ -28,6 +31,8 @@ const formVazio = () => ({
   telefone: '',
   ativo: true,
   caminhao_id: null, // null = sem caminhão
+  acesso_email: '',  // login do motorista (opcional)
+  acesso_senha: '',
 });
 
 // Etiqueta colorida: verde para ativo, cinza para inativo.
@@ -73,6 +78,10 @@ export default function Motoristas() {
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState(null);
   const [confirmando, setConfirmando] = useState(false); // pede um segundo toque para excluir
+
+  // O motorista em edição já tem login? (muda o texto do campo de senha)
+  const [temAcesso, setTemAcesso] = useState(false);
+  const [msgAcesso, setMsgAcesso] = useState(null); // { texto, erro } — aviso da remoção do acesso
 
   const carregar = useCallback(async () => {
     try {
@@ -120,6 +129,8 @@ export default function Motoristas() {
     setForm(formVazio());
     setErroForm(null);
     setConfirmando(false);
+    setTemAcesso(false);
+    setMsgAcesso(null);
     setEditando('novo');
   };
 
@@ -131,9 +142,13 @@ export default function Motoristas() {
       telefone: m.telefone ?? '',
       ativo: Boolean(m.ativo),
       caminhao_id: m.caminhao?.id ?? null,
+      acesso_email: m.acesso_email ?? '',
+      acesso_senha: '',
     });
     setErroForm(null);
     setConfirmando(false);
+    setTemAcesso(Boolean(m.acesso_email));
+    setMsgAcesso(null);
     setEditando(m);
   };
 
@@ -148,14 +163,32 @@ export default function Motoristas() {
       setErroForm('Preencha nome, CPF e CNH.');
       return;
     }
+    if (somenteDigitos(form.cpf).length !== 11) {
+      setErroForm('CPF incompleto. Exemplo: 096.668.979-89');
+      return;
+    }
+    if (somenteDigitos(form.telefone).length !== 11) {
+      setErroForm('Informe o celular com DDD. Exemplo: 44 98751-3965');
+      return;
+    }
+    if (somenteDigitos(form.cnh).length !== 11) {
+      setErroForm('A CNH deve ter 11 números.');
+      return;
+    }
+    if (form.acesso_email.trim() && !temAcesso && form.acesso_senha.length < 6) {
+      setErroForm('Defina uma senha de pelo menos 6 caracteres para o acesso do motorista.');
+      return;
+    }
 
     const corpo = {
       nome: form.nome.trim(),
       cpf: form.cpf.trim(),
       cnh: form.cnh.trim(),
-      telefone: form.telefone.trim() || null,
+      telefone: form.telefone.trim(),
       ativo: form.ativo,
       caminhao_id: form.caminhao_id,
+      acesso_email: form.acesso_email.trim() || null,
+      acesso_senha: form.acesso_senha || null,
     };
 
     setSalvando(true);
@@ -170,6 +203,22 @@ export default function Motoristas() {
       await carregar();
     } catch (e) {
       setErroForm(mensagemDe(e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const removerAcesso = async () => {
+    setSalvando(true);
+    setMsgAcesso(null);
+    try {
+      await api(`/motoristas/${editando.id}/acesso`, { metodo: 'DELETE' });
+      setTemAcesso(false);
+      setForm((atual) => ({ ...atual, acesso_email: '', acesso_senha: '' }));
+      setMsgAcesso({ texto: 'Acesso removido.', erro: false });
+      carregar();
+    } catch (e) {
+      setMsgAcesso({ texto: mensagemDe(e), erro: true });
     } finally {
       setSalvando(false);
     }
@@ -198,12 +247,11 @@ export default function Motoristas() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Motoristas</Text>
+      <Cabecalho titulo="GESTÃO DE MOTORISTAS">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
-      </View>
+      </Cabecalho>
 
       <TextInput
         style={styles.busca}
@@ -243,9 +291,18 @@ export default function Motoristas() {
               CPF {item.cpf} · CNH {item.cnh}
             </Text>
             {item.telefone ? <Text style={styles.detalhe}>{item.telefone}</Text> : null}
+            {linkWhatsApp(item.telefone) && (
+              <Pressable
+                style={styles.whats}
+                onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
+              >
+                <Text style={styles.whatsTexto}>Conversar no WhatsApp</Text>
+              </Pressable>
+            )}
             <Text style={styles.detalhe}>
               Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
             </Text>
+            <Text style={styles.detalhe}>Acesso: {item.acesso_email ?? 'sem login'}</Text>
           </Pressable>
         )}
       />
@@ -262,24 +319,27 @@ export default function Motoristas() {
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
           <Campo
             rotulo="CPF"
+            placeholder="Ex.: 096.668.979-89"
             value={form.cpf}
-            onChangeText={(v) => mudar('cpf', v)}
+            onChangeText={(v) => mudar('cpf', mascaraCPF(v))}
             keyboardType="numeric"
             maxLength={14}
           />
           <Campo
-            rotulo="CNH"
+            rotulo="CNH (número de registro, 11 números)"
+            placeholder="Ex.: 01234567890"
             value={form.cnh}
-            onChangeText={(v) => mudar('cnh', v)}
+            onChangeText={(v) => mudar('cnh', somenteDigitos(v).slice(0, 11))}
             keyboardType="numeric"
-            maxLength={20}
+            maxLength={11}
           />
           <Campo
-            rotulo="Telefone (opcional)"
+            rotulo="Celular com WhatsApp (DDD + número)"
+            placeholder="Ex.: 44 98751-3965"
             value={form.telefone}
-            onChangeText={(v) => mudar('telefone', v)}
+            onChangeText={(v) => mudar('telefone', mascaraTelefone(v))}
             keyboardType="phone-pad"
-            maxLength={20}
+            maxLength={14}
           />
 
           <Text style={styles.rotulo}>Situação</Text>
@@ -303,6 +363,36 @@ export default function Motoristas() {
                 aoTocar={() => mudar('caminhao_id', c.id)}
               />
             ))}
+          </View>
+
+          <Text style={styles.secaoAcesso}>Acesso ao sistema (opcional)</Text>
+          <Text style={styles.dica}>
+            Preencha para o motorista poder entrar no app. Ele verá só o caminhão dele.
+          </Text>
+          <View style={styles.caixaAcesso}>
+            <Campo
+              rotulo="E-mail de acesso"
+              placeholder="Ex.: joao@empresa.com"
+              value={form.acesso_email}
+              onChangeText={(v) => mudar('acesso_email', v)}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <Campo
+              rotulo={temAcesso ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha (mínimo 6 caracteres)'}
+              value={form.acesso_senha}
+              onChangeText={(v) => mudar('acesso_senha', v)}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            {msgAcesso && (
+              <Text style={msgAcesso.erro ? styles.erroForm : styles.okAcesso}>{msgAcesso.texto}</Text>
+            )}
+            {temAcesso && (
+              <Pressable onPress={removerAcesso} disabled={salvando}>
+                <Text style={styles.removerAcesso}>Remover acesso deste motorista</Text>
+              </Pressable>
+            )}
           </View>
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
@@ -345,6 +435,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   busca: {
@@ -363,7 +454,7 @@ const styles = StyleSheet.create({
   etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
-  formConteudo: { paddingBottom: 40 },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
@@ -402,4 +493,20 @@ const styles = StyleSheet.create({
   },
   botaoExcluirAtivo: { backgroundColor: '#dc2626' },
   botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  secaoAcesso: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 8 },
+  dica: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
+  caixaAcesso: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 },
+  botaoAcesso: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 12, alignItems: 'center' },
+  botaoAcessoTexto: { color: '#2563eb', fontSize: 15, fontWeight: '600' },
+  removerAcesso: { color: '#dc2626', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  okAcesso: { color: '#16a34a', marginBottom: 12, fontWeight: '600' },
+  whats: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  whatsTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });

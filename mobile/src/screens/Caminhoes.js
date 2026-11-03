@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
 
 // 15000 -> "15.000"
 const numero = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -78,6 +79,7 @@ export default function Caminhoes() {
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('todos'); // 'todos' | 'ativo' | 'manutencao' | 'inativo'
 
   // editando: null = formulário fechado | 'novo' = cadastrando | objeto = alterando aquele caminhão
   const [editando, setEditando] = useState(null);
@@ -111,14 +113,30 @@ export default function Caminhoes() {
     }, [carregar])
   );
 
-  // Filtra a lista pelo que foi digitado na busca (placa ou modelo).
+  // Quantos caminhões há em cada situação (usado nos cartões do topo).
+  const contagem = useMemo(
+    () => ({
+      todos: caminhoes.length,
+      ativo: caminhoes.filter((c) => c.status === 'ativo').length,
+      manutencao: caminhoes.filter((c) => c.status === 'manutencao').length,
+      inativo: caminhoes.filter((c) => c.status === 'inativo').length,
+    }),
+    [caminhoes]
+  );
+
+  // Filtra a lista pela situação escolhida e pelo que foi digitado (placa, modelo ou motorista).
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return caminhoes;
-    return caminhoes.filter(
-      (c) => c.placa.toLowerCase().includes(termo) || c.modelo.toLowerCase().includes(termo)
-    );
-  }, [caminhoes, busca]);
+    return caminhoes.filter((c) => {
+      if (filtroStatus !== 'todos' && c.status !== filtroStatus) return false;
+      if (!termo) return true;
+      return (
+        c.placa.toLowerCase().includes(termo) ||
+        c.modelo.toLowerCase().includes(termo) ||
+        (c.motorista?.nome ?? '').toLowerCase().includes(termo)
+      );
+    });
+  }, [caminhoes, busca, filtroStatus]);
 
   // Motoristas que podem ser escolhidos: ativos e sem caminhão, mais o que já conduz este caminhão.
   const motoristasDisponiveis = useMemo(() => {
@@ -212,16 +230,34 @@ export default function Caminhoes() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Caminhões</Text>
+      <Cabecalho titulo="GESTÃO DE FROTA">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
+      </Cabecalho>
+
+      {/* Cartões com o resumo da frota: tocar em um deles filtra a lista */}
+      <View style={styles.cartoes}>
+        {[
+          ['todos', 'Total', '#2563eb'],
+          ['ativo', 'Ativos', '#16a34a'],
+          ['manutencao', 'Manutenção', '#d97706'],
+          ['inativo', 'Inativos', '#6b7280'],
+        ].map(([valor, rotulo, cor]) => (
+          <Pressable
+            key={valor}
+            onPress={() => setFiltroStatus(valor)}
+            style={[styles.cartaoFiltro, filtroStatus === valor && { borderColor: cor, borderWidth: 2 }]}
+          >
+            <Text style={[styles.cartaoNumero, { color: cor }]}>{contagem[valor]}</Text>
+            <Text style={styles.cartaoRotulo}>{rotulo}</Text>
+          </Pressable>
+        ))}
       </View>
 
       <TextInput
         style={styles.busca}
-        placeholder="Buscar por placa ou modelo"
+        placeholder="Buscar caminhão (placa, modelo ou motorista)"
         value={busca}
         onChangeText={setBusca}
         autoCapitalize="none"
@@ -276,10 +312,11 @@ export default function Caminhoes() {
           <Campo
             rotulo="Placa"
             value={form.placa}
-            onChangeText={(v) => mudar('placa', v)}
+            onChangeText={(v) => mudar('placa', v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7))}
+            placeholder="ABC1234 ou ABC1D23"
             autoCapitalize="characters"
             autoCorrect={false}
-            maxLength={8}
+            maxLength={7}
           />
           <Campo rotulo="Modelo" value={form.modelo} onChangeText={(v) => mudar('modelo', v)} />
           <Campo
@@ -378,6 +415,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
+  cartoes: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  cartaoFiltro: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  cartaoNumero: { fontSize: 22, fontWeight: 'bold' },
+  cartaoRotulo: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   busca: {
@@ -397,7 +447,7 @@ const styles = StyleSheet.create({
   etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
-  formConteudo: { paddingBottom: 40 },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
