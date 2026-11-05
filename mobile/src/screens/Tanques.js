@@ -13,6 +13,9 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
+import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
+import Cabecalho from '../components/Cabecalho';
+import Entradas from './Entradas';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -20,6 +23,7 @@ const litrosFmt = (n) => {
   const [inteiro, decimal] = String(Number(n)).split('.');
   return separar(inteiro) + (decimal ? `,${decimal}` : '');
 };
+const moedaL = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',') + '/L';
 const percentual = (t) =>
   Number(t.capacidade) > 0 ? (Number(t.nivel_atual) / Number(t.capacidade)) * 100 : 0;
 
@@ -33,7 +37,14 @@ const mensagemDe = (e) =>
 const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina', 'Etanol'];
 
 // Formulário em branco para um tanque novo.
-const formVazio = () => ({ nome: '', tipo_combustivel: '', capacidade: '', nivel_atual: '0' });
+const formVazio = () => ({
+  nome: '',
+  tipo_combustivel: '',
+  capacidade: '',
+  nivel_atual: '0',
+  custo_litro_inicial: '',
+  principal: false,
+});
 
 // Campo de texto com rótulo em cima.
 function Campo({ rotulo, ...props }) {
@@ -46,6 +57,7 @@ function Campo({ rotulo, ...props }) {
 }
 
 export default function Tanques() {
+  const [aba, setAba] = useState('tanques'); // 'tanques' ou 'entradas'
   const [tanques, setTanques] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -74,7 +86,7 @@ export default function Tanques() {
   useFocusEffect(
     useCallback(() => {
       carregar();
-    }, [carregar])
+    }, [carregar, aba])
   );
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -92,6 +104,7 @@ export default function Tanques() {
       tipo_combustivel: t.tipo_combustivel,
       capacidade: String(Number(t.capacidade)),
       nivel_atual: String(Number(t.nivel_atual)),
+      principal: Boolean(t.principal),
     });
     setErroForm(null);
     setConfirmando(false);
@@ -121,13 +134,23 @@ export default function Tanques() {
       return;
     }
 
+    const custoInicial = form.custo_litro_inicial ? moedaParaNumero(form.custo_litro_inicial) : 0;
+    if (editando === 'novo' && (Number.isNaN(custoInicial) || custoInicial < 0)) {
+      setErroForm('Custo por litro inválido.');
+      return;
+    }
+
     const corpo = {
       nome: form.nome.trim(),
       tipo_combustivel: form.tipo_combustivel.trim(),
       capacidade,
+      principal: form.principal,
     };
     // O nível só é enviado no cadastro. Depois ele muda sozinho (entradas e abastecimentos).
-    if (editando === 'novo') corpo.nivel_atual = nivel;
+    if (editando === 'novo') {
+      corpo.nivel_atual = nivel;
+      corpo.custo_litro_inicial = custoInicial;
+    }
 
     setSalvando(true);
     setErroForm(null);
@@ -169,58 +192,84 @@ export default function Tanques() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Tanques</Text>
-        <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
-          <Text style={styles.botaoNovoTexto}>+ Novo</Text>
-        </Pressable>
+      <Cabecalho titulo="GESTÃO DE TANQUES">
+        {aba === 'tanques' && (
+          <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
+            <Text style={styles.botaoNovoTexto}>+ Novo tanque</Text>
+          </Pressable>
+        )}
+      </Cabecalho>
+
+      <View style={styles.segmentos}>
+        {[
+          ['tanques', 'Tanques'],
+          ['entradas', 'Entradas'],
+        ].map(([valor, rotulo]) => (
+          <Pressable
+            key={valor}
+            onPress={() => setAba(valor)}
+            style={[styles.segmento, aba === valor && styles.segmentoAtivo]}
+          >
+            <Text style={[styles.segmentoTexto, aba === valor && { color: '#fff' }]}>{rotulo}</Text>
+          </Pressable>
+        ))}
       </View>
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+      {aba === 'entradas' && <Entradas />}
 
-      <FlatList
-        data={tanques}
-        keyExtractor={(item) => String(item.id)}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
-              carregar();
+      {aba === 'tanques' && (
+        <>
+          {erro && <Text style={styles.erro}>{erro}</Text>}
+          {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+          <FlatList
+            data={tanques}
+            keyExtractor={(item) => String(item.id)}
+            refreshControl={
+              <RefreshControl
+                refreshing={atualizando}
+                onRefresh={() => {
+                  setAtualizando(true);
+                  carregar();
+                }}
+              />
+            }
+            ListEmptyComponent={
+              !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
+            }
+            contentContainerStyle={{ paddingBottom: 24 }}
+            renderItem={({ item }) => {
+              const pct = percentual(item);
+              const baixo = pct < 20;
+              return (
+                <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
+                  <View style={styles.topo}>
+                    <Text style={styles.nomeItem}>
+                      {item.nome} · {item.tipo_combustivel}
+                      {item.principal ? ' · PRINCIPAL' : ''}
+                    </Text>
+                    {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
+                  </View>
+                  <View style={styles.barraFundo}>
+                    <View
+                      style={[
+                        styles.barra,
+                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.detalhe}>
+                    {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
+                  </Text>
+                  <Text style={styles.custo}>
+                    Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
+                  </Text>
+                </Pressable>
+              );
             }}
           />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => {
-          const pct = percentual(item);
-          const baixo = pct < 20;
-          return (
-            <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-              <View style={styles.topo}>
-                <Text style={styles.nomeItem}>
-                  {item.nome} · {item.tipo_combustivel}
-                </Text>
-                {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
-              </View>
-              <View style={styles.barraFundo}>
-                <View
-                  style={[
-                    styles.barra,
-                    { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
-                  ]}
-                />
-              </View>
-              <Text style={styles.detalhe}>
-                {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
-              </Text>
-            </Pressable>
-          );
-        }}
-      />
+        </>
+      )}
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
@@ -260,12 +309,21 @@ export default function Tanques() {
           />
 
           {editando === 'novo' ? (
-            <Campo
-              rotulo="Nível inicial (litros)"
-              value={form.nivel_atual}
-              onChangeText={(v) => mudar('nivel_atual', v)}
-              keyboardType="decimal-pad"
-            />
+            <>
+              <Campo
+                rotulo="Nível inicial (litros)"
+                value={form.nivel_atual}
+                onChangeText={(v) => mudar('nivel_atual', v)}
+                keyboardType="decimal-pad"
+              />
+              <Campo
+                rotulo="Custo do nível inicial (por litro)"
+                placeholder="R$ 0,00"
+                value={form.custo_litro_inicial}
+                onChangeText={(v) => mudar('custo_litro_inicial', mascaraMoeda(v))}
+                keyboardType="numeric"
+              />
+            </>
           ) : (
             <View style={styles.grupo}>
               <Text style={styles.rotulo}>Nível atual</Text>
@@ -274,6 +332,24 @@ export default function Tanques() {
               </Text>
             </View>
           )}
+
+          <Text style={styles.rotulo}>Tanque principal da base?</Text>
+          <View style={styles.opcoes}>
+            {[
+              [true, 'Sim'],
+              [false, 'Não'],
+            ].map(([valor, rotulo]) => (
+              <Pressable
+                key={rotulo}
+                onPress={() => mudar('principal', valor)}
+                style={[styles.opcao, form.principal === valor && styles.opcaoAtiva]}
+              >
+                <Text style={[styles.opcaoTexto, form.principal === valor && { color: '#fff' }]}>
+                  {rotulo}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
@@ -315,8 +391,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
   botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  segmentos: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 3,
+    marginBottom: 12,
+  },
+  segmento: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  segmentoAtivo: { backgroundColor: '#2563eb' },
+  segmentoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
@@ -326,6 +413,7 @@ const styles = StyleSheet.create({
   barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
+  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },

@@ -14,7 +14,7 @@ class Manutencao extends Model
 
     protected $fillable = [
         'caminhao_id', 'motorista_id', 'nota_fiscal_id',
-        'data', 'data_prevista', 'data_realizada', 'status',
+        'data', 'data_prevista', 'data_realizada', 'status', 'motivo_recusa',
         'tipo', 'oficina', 'descricao', 'checklist', 'valor', 'km',
     ];
 

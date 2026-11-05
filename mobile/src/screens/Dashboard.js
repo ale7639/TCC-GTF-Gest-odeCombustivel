@@ -8,15 +8,18 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
-import { useAuth } from '../auth/AuthContext';
+import Cabecalho from '../components/Cabecalho';
 
 // Funções de formatação: 15000 -> "15.000" | 6350 -> "R$ 6.350,00" | "2026-10-16" -> "16/10/2026"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const numero = (n) => separar(String(Math.round(n)));
 const moeda = (n) => 'R$ ' + separar(Number(n).toFixed(2).replace('.', ','));
 const dataBR = (d) => d.split('-').reverse().join('/');
+
+// Períodos que o painel oferece.
+const PERIODOS = [7, 30, 90];
 
 // Cartão pequeno com um número em destaque.
 function Cartao({ titulo, valor }) {
@@ -30,8 +33,44 @@ function Cartao({ titulo, valor }) {
   );
 }
 
+// Barra de nível de um tanque (verde; vermelha quando está baixo).
+function NivelTanque({ tanque, destaque }) {
+  return (
+    <View style={[styles.caixa, destaque && styles.caixaDestaque]}>
+      <View style={styles.topoTanque}>
+        <Text style={destaque ? styles.nomeDestaque : styles.nomeItem}>
+          {tanque.nome} · {tanque.tipo_combustivel}
+        </Text>
+        {tanque.alerta && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
+      </View>
+      <View style={[styles.barraFundo, destaque && { height: 16, borderRadius: 8 }]}>
+        <View
+          style={[
+            styles.barra,
+            destaque && { height: 16 },
+            {
+              width: `${Math.min(tanque.percentual, 100)}%`,
+              backgroundColor: tanque.alerta ? '#dc2626' : '#16a34a',
+            },
+          ]}
+        />
+      </View>
+      <Text style={styles.detalhe}>
+        {numero(tanque.nivel_atual)} L de {numero(tanque.capacidade)} L (
+        {String(tanque.percentual).replace('.', ',')}%)
+      </Text>
+      {tanque.custo_medio != null && (
+        <Text style={styles.custo}>
+          Custo médio: R$ {Number(tanque.custo_medio).toFixed(2).replace('.', ',')}/L
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export default function Dashboard() {
-  const { sair } = useAuth();
+  const navegacao = useNavigation();
+  const [dias, setDias] = useState(30);                  // período escolhido no filtro
   const [dados, setDados] = useState(null);              // resposta da API
   const [erro, setErro] = useState(null);                // mensagem de erro, se houver
   const [atualizando, setAtualizando] = useState(false); // controla o "puxar para atualizar"
@@ -39,15 +78,15 @@ export default function Dashboard() {
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      setDados(await api('/dashboard')); // o token é enviado automaticamente pelo api()
+      setDados(await api(`/dashboard?dias=${dias}`)); // o token é enviado automaticamente pelo api()
     } catch (e) {
       setErro('Não foi possível carregar os dados. Verifique se o servidor está ligado.');
     } finally {
       setAtualizando(false);
     }
-  }, []);
+  }, [dias]);
 
-  // Recarrega os dados toda vez que a aba é aberta (assim reflete cadastros feitos em outras telas).
+  // Recarrega toda vez que a aba é aberta ou que o período muda.
   useFocusEffect(
     useCallback(() => {
       carregar();
@@ -68,11 +107,19 @@ export default function Dashboard() {
         />
       }
     >
-      <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Painel da Frota</Text>
-        <Pressable onPress={sair}>
-          <Text style={styles.sair}>Sair</Text>
-        </Pressable>
+      <Cabecalho titulo="PAINEL DA FROTA" />
+
+      {/* Filtro de período */}
+      <View style={styles.periodos}>
+        {PERIODOS.map((p) => (
+          <Pressable
+            key={p}
+            onPress={() => setDias(p)}
+            style={[styles.periodo, dias === p && styles.periodoAtivo]}
+          >
+            <Text style={[styles.periodoTexto, dias === p && { color: '#fff' }]}>{p} dias</Text>
+          </Pressable>
+        ))}
       </View>
 
       {erro && <Text style={styles.erro}>{erro}</Text>}
@@ -80,44 +127,43 @@ export default function Dashboard() {
 
       {dados && (
         <>
-          <View style={styles.linha}>
-            <Cartao titulo="Caminhões" valor={dados.caminhoes.total} />
-            <Cartao titulo="Ativos" valor={dados.caminhoes.ativos} />
-            <Cartao titulo="Em manutenção" valor={dados.caminhoes.em_manutencao} />
-          </View>
-
-          <View style={styles.linha}>
-            <Cartao titulo="Litros (30 dias)" valor={numero(dados.litros_abastecidos_30_dias)} />
-            <Cartao titulo="Manutenção (30 dias)" valor={moeda(dados.gasto_manutencao_30_dias)} />
-          </View>
-
-          <Text style={styles.secao}>Tanques</Text>
-          {dados.tanques.map((t) => (
-            <View key={t.id} style={styles.caixa}>
-              <View style={styles.topoTanque}>
-                <Text style={styles.nomeItem}>
-                  {t.nome} · {t.tipo_combustivel}
-                </Text>
-                {t.alerta && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
-              </View>
-              <View style={styles.barraFundo}>
-                <View
-                  style={[
-                    styles.barra,
-                    {
-                      width: `${Math.min(t.percentual, 100)}%`,
-                      backgroundColor: t.alerta ? '#dc2626' : '#16a34a',
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={styles.detalhe}>
-                {numero(t.nivel_atual)} L de {numero(t.capacidade)} L ({t.percentual}%)
+          {dados.pendentes > 0 && (
+            <Pressable style={styles.pendencias} onPress={() => navegacao.navigate('Aprovacoes')}>
+              <Text style={styles.pendenciasTexto}>
+                {dados.pendentes} {dados.pendentes === 1 ? 'lançamento aguarda' : 'lançamentos aguardam'} aprovação · Ver
               </Text>
-            </View>
-          ))}
+            </Pressable>
+          )}
+
+          <View style={styles.linha}>
+            <Cartao titulo={`Litros abastecidos (${dados.dias} dias)`} valor={numero(dados.litros_abastecidos)} />
+            <Cartao titulo={`Litros comprados (${dados.dias} dias)`} valor={numero(dados.litros_comprados)} />
+          </View>
+          <View style={styles.linha}>
+            <Cartao titulo={`Gasto com combustível (${dados.dias} dias)`} valor={moeda(dados.gasto_combustivel)} />
+            <Cartao titulo={`Gasto com manutenção (${dados.dias} dias)`} valor={moeda(dados.gasto_manutencao)} />
+          </View>
+
+          {dados.tanque_principal && (
+            <>
+              <Text style={styles.secao}>Tanque principal</Text>
+              <NivelTanque tanque={dados.tanque_principal} destaque />
+            </>
+          )}
+
+          {dados.outros_tanques.length > 0 && (
+            <>
+              <Text style={styles.secao}>Outros tanques</Text>
+              {dados.outros_tanques.map((t) => (
+                <NivelTanque key={t.id} tanque={t} />
+              ))}
+            </>
+          )}
 
           <Text style={styles.secao}>Últimos abastecimentos</Text>
+          {dados.ultimos_abastecimentos.length === 0 && (
+            <Text style={styles.vazio}>Nenhum abastecimento registrado.</Text>
+          )}
           {dados.ultimos_abastecimentos.map((a) => (
             <View key={a.id} style={styles.caixa}>
               <Text style={styles.nomeItem}>
@@ -126,6 +172,23 @@ export default function Dashboard() {
               <Text style={styles.detalhe}>
                 {a.motorista} · {a.tanque} · {dataBR(a.data)}
               </Text>
+            </View>
+          ))}
+
+          <Text style={styles.secao}>Últimas notas fiscais</Text>
+          {dados.ultimas_notas_fiscais.length === 0 && (
+            <Text style={styles.vazio}>Nenhuma nota fiscal cadastrada.</Text>
+          )}
+          {dados.ultimas_notas_fiscais.map((n) => (
+            <View key={n.id} style={styles.caixa}>
+              <View style={styles.topoTanque}>
+                <Text style={styles.nomeItem}>NF {n.numero}</Text>
+                <Text style={styles.nomeItem}>{moeda(n.valor_total)}</Text>
+              </View>
+              <Text style={styles.detalhe}>
+                {n.fornecedor} · {dataBR(n.data_emissao)}
+              </Text>
+              <Text style={styles.detalhe}>{n.descricao}</Text>
             </View>
           ))}
         </>
@@ -141,11 +204,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
   sair: { fontSize: 16, fontWeight: '600', color: '#2563eb' },
+  periodos: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  periodo: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  periodoAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  periodoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
+  pendencias: { backgroundColor: '#fef3c7', borderRadius: 12, padding: 12, marginBottom: 8 },
+  pendenciasTexto: { color: '#92400e', fontWeight: '600', fontSize: 14 },
+  vazio: { color: '#6b7280', marginBottom: 8 },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: {
     flex: 1,
@@ -158,10 +236,13 @@ const styles = StyleSheet.create({
   cartaoTitulo: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
   secao: { fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 8, color: '#111827' },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  caixaDestaque: { borderWidth: 2, borderColor: '#2563eb', padding: 16 },
   topoTanque: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   nomeItem: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  nomeDestaque: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   alerta: { color: '#dc2626', fontWeight: 'bold', fontSize: 12 },
   barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
+  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
 });

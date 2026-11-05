@@ -62,6 +62,19 @@ class User extends Authenticatable
         return $this->role === self::MOTORISTA;
     }
 
+    /**
+     * Compat mobile (Wallace): "perfil" admin|motorista derivado de role.
+     * Preferimos role (administrador|supervisor|motorista) no web Diego.
+     */
+    public function getPerfilAttribute(): string
+    {
+        if ($this->role === self::MOTORISTA) {
+            return 'motorista';
+        }
+
+        return 'admin';
+    }
+
     public function toPublicArray(): array
     {
         return [
@@ -71,6 +84,7 @@ class User extends Authenticatable
             'email' => $this->email,
             'telefone' => $this->telefone,
             'role' => $this->role,
+            'perfil' => $this->perfil,
             'is_active' => (bool) $this->is_active,
             'motorista_id' => $this->motorista_id,
         ];

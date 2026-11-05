@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Caminhao;
+use App\Models\LogAcesso;
 use App\Models\Motorista;
 use App\Models\NotificacaoLeitura;
 use App\Models\SolicitacaoSenha;
@@ -15,6 +16,27 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
+    private function registrarAcesso(Request $request, string $identificador, string $evento, bool $sucesso, ?int $userId = null, ?string $motivo = null): void
+    {
+        if (! class_exists(LogAcesso::class)) {
+            return;
+        }
+
+        try {
+            LogAcesso::create([
+                'user_id' => $userId,
+                'email' => mb_substr($identificador, 0, 255),
+                'evento' => $evento,
+                'sucesso' => $sucesso,
+                'motivo' => $motivo,
+                'ip' => $request->ip(),
+                'dispositivo' => LogAcesso::resumirDispositivo($request->userAgent()),
+            ]);
+        } catch (\Throwable) {
+            // Log de acesso não deve quebrar o login.
+        }
+    }
+
     public function login(Request $request): JsonResponse
     {
         $dados = $request->validate([
@@ -26,22 +48,44 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        $identificador = trim((string) ($dados['login'] ?? $dados['cpf'] ?? $dados['email'] ?? ''));
         $usuario = $this->resolverUsuarioLogin($dados);
 
         if (! $usuario || ! $usuario->is_active || ! Hash::check($dados['password'], $usuario->password)) {
+            $this->registrarAcesso(
+                $request,
+                $identificador,
+                'login',
+                false,
+                $usuario?->id,
+                $usuario ? ($usuario->is_active ? 'Senha incorreta' : 'Usuário inativo') : 'Login não cadastrado'
+            );
+
             return response()->json(['message' => 'Credenciais inválidas.'], 401);
         }
 
         // Motorista autentica por CPF; admin/supervisor por e-mail.
         if ($usuario->isMotorista() && ! $this->loginFoiCpf($dados)) {
+            $this->registrarAcesso($request, $identificador, 'login', false, $usuario->id, 'Motorista sem CPF');
+
             return response()->json([
                 'message' => 'Motorista: entre com o CPF cadastrado e a senha.',
             ], 401);
         }
 
+        if ($usuario->isMotorista()) {
+            $motorista = Motorista::find($usuario->motorista_id);
+            if (! $motorista || ! $motorista->ativo) {
+                $this->registrarAcesso($request, $usuario->email ?: $identificador, 'login', false, $usuario->id, 'Motorista inativo');
+
+                return response()->json(['message' => 'Seu acesso está desativado. Fale com o administrador.'], 403);
+            }
+        }
+
         $usuario->tokens()->delete();
         $token = $usuario->createToken('gfc', ['*'], now()->addHours(24))->plainTextToken;
 
+        $this->registrarAcesso($request, $usuario->email ?: $identificador, 'login', true, $usuario->id);
         Auditoria::registrar('auth.login', $usuario);
 
         $publico = $usuario->toPublicArray();
@@ -56,6 +100,7 @@ class AuthController extends Controller
                 'nome' => $usuario->name,
                 'email' => $usuario->email,
                 'role' => $usuario->role,
+                'perfil' => $publico['perfil'] ?? ($usuario->isMotorista() ? 'motorista' : 'admin'),
             ],
         ]);
     }
@@ -123,7 +168,9 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $usuario = $request->user();
+        $this->registrarAcesso($request, $usuario->email ?? '', 'logout', true, $usuario->id);
+        $usuario->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Sessão encerrada.']);
     }

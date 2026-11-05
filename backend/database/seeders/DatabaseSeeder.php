@@ -11,5 +11,6 @@ class DatabaseSeeder extends Seeder
         $this->call(DadosTesteSeeder::class);
         $this->call(AdminSeeder::class);
         $this->call(IdeiasFaltantesSeeder::class);
+        $this->call(DemonstracaoSeeder::class);
     }
 }

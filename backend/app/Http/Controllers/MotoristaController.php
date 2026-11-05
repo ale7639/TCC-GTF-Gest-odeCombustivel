@@ -134,6 +134,17 @@ class MotoristaController extends Controller
         return response()->json(['message' => 'Motorista excluído.']);
     }
 
+    /** DELETE /api/motoristas/{id}/acesso — remove login; cadastro do motorista permanece. */
+    public function removerAcesso(Motorista $motorista): JsonResponse
+    {
+        User::where('motorista_id', $motorista->id)->get()->each(function ($usuario) {
+            $usuario->tokens()->delete();
+            $usuario->delete();
+        });
+
+        return response()->json(['message' => 'Acesso removido.']);
+    }
+
     private function vincular(Motorista $motorista, ?int $caminhaoId): void
     {
         Caminhao::where('motorista_id', $motorista->id)->update(['motorista_id' => null]);

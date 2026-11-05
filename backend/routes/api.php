@@ -1,24 +1,36 @@
 <?php
 
 use App\Http\Controllers\AbastecimentoController;
+use App\Http\Controllers\AprovacaoController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CaminhaoController;
 use App\Http\Controllers\ChecklistPreViagemController;
 use App\Http\Controllers\ConciliacaoTanqueController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EntradaCombustivelController;
 use App\Http\Controllers\LavagemController;
+use App\Http\Controllers\LogAcessoController;
 use App\Http\Controllers\ManutencaoController;
+use App\Http\Controllers\MeuController;
 use App\Http\Controllers\MotoristaController;
 use App\Http\Controllers\MultaController;
+use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\NotificacaoController;
 use App\Http\Controllers\PneuController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\TanqueController;
 use App\Http\Controllers\UserController;
+use App\Http\Middleware\ApenasAdmin;
+use App\Http\Middleware\ApenasMotorista;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 Route::post('/senha/esqueci', [AuthController::class, 'esqueciSenha'])->middleware('throttle:10,1');
+
+// Foto assinada (mobile / aprovações) — pública só com URL signed.
+Route::get('/fotos/abastecimentos/{abastecimento}', [AprovacaoController::class, 'foto'])
+    ->name('abastecimentos.foto')
+    ->middleware('signed');
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -53,6 +65,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/checklists', [ChecklistPreViagemController::class, 'index']);
     Route::post('/checklists', [ChecklistPreViagemController::class, 'store']);
 
+    // Área do motorista (app mobile Wallace) — caminhão vem do token.
+    Route::middleware(ApenasMotorista::class)->prefix('meu')->group(function () {
+        Route::get('/painel', [MeuController::class, 'painel']);
+        Route::get('/tanques', [MeuController::class, 'tanques']);
+        Route::post('/abastecimentos', [MeuController::class, 'abastecer']);
+        Route::post('/lavagens', [MeuController::class, 'lavar']);
+        Route::post('/manutencoes', [MeuController::class, 'manter']);
+    });
+
     Route::middleware('role:administrador')->group(function () {
         Route::post('/caminhoes', [CaminhaoController::class, 'store']);
         Route::put('/caminhoes/{caminhao}', [CaminhaoController::class, 'update']);
@@ -62,12 +83,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::put('/motoristas/{motorista}', [MotoristaController::class, 'update']);
         Route::put('/motoristas/{motorista}/senha', [MotoristaController::class, 'alterarSenha']);
         Route::delete('/motoristas/{motorista}', [MotoristaController::class, 'destroy']);
+        Route::delete('/motoristas/{motorista}/acesso', [MotoristaController::class, 'removerAcesso']);
 
         Route::delete('/tanques/{tanque}', [TanqueController::class, 'destroy']);
 
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);
+
+        Route::get('/logs-acesso', [LogAcessoController::class, 'index']);
     });
 
     Route::middleware('role:administrador,supervisor')->group(function () {
@@ -81,6 +105,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/tanques/{tanque}/conciliacoes/preview', [ConciliacaoTanqueController::class, 'preview']);
         Route::post('/tanques/{tanque}/conciliacoes', [ConciliacaoTanqueController::class, 'store']);
 
+        Route::apiResource('entradas', EntradaCombustivelController::class)->only(['index', 'store', 'destroy']);
+
         Route::delete('/abastecimentos/{abastecimento}', [AbastecimentoController::class, 'destroy']);
 
         Route::post('/caminhoes/{caminhao}/manutencoes', [ManutencaoController::class, 'store']);
@@ -88,6 +114,26 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::patch('/caminhoes/{caminhao}/manutencoes/{manutencao}/status', [ManutencaoController::class, 'atualizarStatus']);
         Route::post('/caminhoes/{caminhao}/pneus', [PneuController::class, 'store']);
         Route::delete('/caminhoes/{caminhao}/pneus/{pneu}', [PneuController::class, 'destroy']);
+
+        // Aprovações / listagens flat (mobile admin Wallace).
+        Route::middleware(ApenasAdmin::class)->group(function () {
+            Route::get('/aprovacoes', [AprovacaoController::class, 'index']);
+            Route::post('/aprovacoes/{tipo}/{id}/aprovar', [AprovacaoController::class, 'aprovar'])
+                ->whereIn('tipo', ['abastecimento', 'lavagem', 'manutencao'])->whereNumber('id');
+            Route::post('/aprovacoes/{tipo}/{id}/recusar', [AprovacaoController::class, 'recusar'])
+                ->whereIn('tipo', ['abastecimento', 'lavagem', 'manutencao'])->whereNumber('id');
+
+            Route::get('/lavagens', [LavagemController::class, 'listarTodas']);
+            Route::post('/lavagens', [LavagemController::class, 'storeGlobal']);
+            Route::delete('/lavagens/{id}', [LavagemController::class, 'destroy'])->whereNumber('id');
+            Route::get('/manutencoes', [ManutencaoController::class, 'listarTodas']);
+            Route::post('/manutencoes', [ManutencaoController::class, 'storeGlobal']);
+            Route::delete('/manutencoes/{id}', [ManutencaoController::class, 'destroy'])->whereNumber('id');
+
+            Route::get('/notas-fiscais', [NotaFiscalController::class, 'index']);
+            Route::post('/notas-fiscais', [NotaFiscalController::class, 'store']);
+            Route::delete('/notas-fiscais/{id}', [NotaFiscalController::class, 'destroy'])->whereNumber('id');
+        });
 
         Route::get('/multas', [MultaController::class, 'index']);
         Route::post('/multas', [MultaController::class, 'store']);
@@ -101,5 +147,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/relatorios/cpk', [RelatorioController::class, 'cpk']);
         Route::get('/relatorios/ranking-motoristas', [RelatorioController::class, 'rankingMotoristas']);
         Route::get('/relatorios/disponibilidade', [RelatorioController::class, 'disponibilidade']);
+        Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
     });
 });

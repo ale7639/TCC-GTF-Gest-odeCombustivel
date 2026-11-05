@@ -12,12 +12,15 @@ class EntradaCombustivel extends Model
 
     protected $table = 'entradas_combustivel';
 
-    protected $fillable = ['tanque_id', 'nota_fiscal_id', 'data', 'litros', 'valor_total'];
+    protected $fillable = [
+        'tanque_id', 'nota_fiscal_id', 'data', 'litros', 'valor_total', 'custo_medio_apos',
+    ];
 
     protected $casts = [
-        'data'        => 'date',
-        'litros'      => 'decimal:2',
-        'valor_total' => 'decimal:2',
+        'data'             => 'date',
+        'litros'           => 'decimal:2',
+        'valor_total'      => 'decimal:2',
+        'custo_medio_apos' => 'decimal:4',
     ];
 
     public function tanque(): BelongsTo
