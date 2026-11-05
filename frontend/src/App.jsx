@@ -37,9 +37,23 @@ function Admin({ children }) {
   return isAdmin ? children : <Navigate to="/app" replace />
 }
 
+/**
+ * Classe de layout conforme o papel:
+ * - administrador → layout-web (tela cheia, desktop)
+ * - supervisor / motorista → layout-mobile (moldura de celular)
+ * - sem sessão → layout-auth (formulário limpo)
+ */
+function layoutClass({ token, isAdmin }) {
+  if (!token) return 'device layout-auth'
+  if (isAdmin) return 'device layout-web'
+  return 'device layout-mobile'
+}
+
 export default function App() {
+  const { token, isAdmin } = useAuth()
+
   return (
-    <div className="device">
+    <div className={layoutClass({ token, isAdmin })}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/app" element={<Private><Shell /></Private>}>

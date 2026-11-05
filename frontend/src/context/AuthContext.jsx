@@ -18,6 +18,7 @@ export function AuthProvider({ children }) {
         localStorage.setItem('gfc_user', JSON.stringify(next))
         setUser(next)
       },
+      // administrador: layout web completo; supervisor/motorista: experiência mobile
       isAdmin: role === 'administrador',
       isGestao: role === 'administrador' || role === 'supervisor',
       isMotorista: role === 'motorista',
@@ -30,7 +31,7 @@ export function AuthProvider({ children }) {
         return data.user
       },
       async logout() {
-        try { await api.post('/logout') } catch { /* ignore */ }
+        try { await api.post('/logout') } catch { /* sessão local limpa mesmo se a API falhar */ }
         localStorage.removeItem('gfc_token')
         localStorage.removeItem('gfc_user')
         setToken(null)
