@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
 import DateField from '../components/DateField'
@@ -13,6 +14,7 @@ const vazio = {
 
 export default function Drivers() {
   const { isAdmin } = useAuth()
+  const [params, setParams] = useSearchParams()
   const [lista, setLista] = useState([])
   const [caminhoes, setCaminhoes] = useState([])
   const [form, setForm] = useState(null)
@@ -28,6 +30,18 @@ export default function Drivers() {
   }
 
   useEffect(() => { carregar().catch(() => setError('Falha ao carregar motoristas.')) }, [])
+
+  // Deep-link do sino: /app/motoristas?senha={id} abre “Alterar senha”.
+  useEffect(() => {
+    const mid = params.get('senha')
+    if (!mid || !lista.length || !isAdmin) return
+    const m = lista.find((x) => String(x.id) === String(mid))
+    if (!m) return
+    setSenhaForm({ id: m.id, nome: m.nome, password: '', password_confirmation: '' })
+    setOk(`Pedido de senha: defina uma nova senha para ${m.nome}.`)
+    params.delete('senha')
+    setParams(params, { replace: true })
+  }, [lista, params, setParams, isAdmin])
 
   async function salvar(event) {
     event.preventDefault()

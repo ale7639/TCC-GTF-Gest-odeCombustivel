@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Caminhao;
 use App\Models\Motorista;
+use App\Models\NotificacaoLeitura;
 use App\Models\SolicitacaoSenha;
 use App\Models\User;
 use App\Support\Auditoria;
@@ -87,23 +88,32 @@ class AuthController extends Controller
                 ->exists();
 
             if ($temAcesso) {
-                $pendente = SolicitacaoSenha::pendentes()
+                // Sempre gera pedido “novo” no sino: encerra pendente antiga e cria outra
+                // (chave senha:{id} inédita → aparece como não lida para o ADM).
+                $antigas = SolicitacaoSenha::pendentes()
                     ->where('motorista_id', $motorista->id)
-                    ->first();
-
-                if ($pendente) {
-                    $pendente->touch();
-                } else {
-                    SolicitacaoSenha::create([
-                        'motorista_id' => $motorista->id,
-                        'cpf' => $motorista->cpf,
-                        'nome' => $motorista->nome,
-                        'status' => SolicitacaoSenha::PENDENTE,
+                    ->get();
+                foreach ($antigas as $antiga) {
+                    NotificacaoLeitura::where('chave', 'senha:'.$antiga->id)->delete();
+                    $antiga->update([
+                        'status' => SolicitacaoSenha::ATENDIDA,
+                        'atendida_em' => now(),
                     ]);
                 }
 
+                $nova = SolicitacaoSenha::create([
+                    'motorista_id' => $motorista->id,
+                    'cpf' => $motorista->cpf,
+                    'nome' => $motorista->nome,
+                    'status' => SolicitacaoSenha::PENDENTE,
+                ]);
+
+                // Garante que nenhum admin tenha essa chave marcada como lida.
+                NotificacaoLeitura::where('chave', 'senha:'.$nova->id)->delete();
+
                 Auditoria::registrar('auth.esqueci_senha', $motorista, [
                     'cpf' => $motorista->cpf,
+                    'solicitacao_id' => $nova->id,
                 ]);
             }
         }

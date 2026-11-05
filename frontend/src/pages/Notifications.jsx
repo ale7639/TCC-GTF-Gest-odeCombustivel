@@ -89,8 +89,8 @@ export default function Notifications() {
                 </div>
                 <p className="muted" style={{ margin: 0, textAlign: 'left' }}>{n.texto}</p>
               </div>
-              <span className={`badge ${n.nivel === 'vencido' ? 'badge-nao_apto' : 'badge-pendente'}`}>
-                {n.nivel === 'vencido' ? 'Urgente' : 'Atenção'}
+              <span className={`badge ${n.tipo === 'senha' ? 'badge-pendente' : (n.nivel === 'vencido' ? 'badge-nao_apto' : 'badge-pendente')}`}>
+                {n.tipo === 'senha' ? 'Senha' : (n.nivel === 'vencido' ? 'Urgente' : 'Atenção')}
               </span>
             </div>
             {n.link && (

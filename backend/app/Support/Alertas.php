@@ -26,21 +26,25 @@ class Alertas
             return self::motorista($usuario->motorista_id);
         }
 
-        $alertas = self::gestao($inicio);
+        $alertas = self::ordenar(self::gestao($inicio));
 
-        // Pedidos de troca de senha: só administrador.
+        // Pedidos de troca de senha: só administrador, sempre no topo do sino.
         if ($usuario->isAdmin()) {
-            foreach (SolicitacaoSenha::pendentes()->orderByDesc('updated_at')->limit(20)->get() as $s) {
-                $alertas[] = self::item(
+            $senha = [];
+            foreach (SolicitacaoSenha::pendentes()->orderByDesc('id')->limit(20)->get() as $s) {
+                $quando = ($s->created_at ?? $s->updated_at)
+                    ?->timezone(config('app.timezone'))
+                    ?->format('d/m/Y H:i');
+                $senha[] = self::item(
                     'senha:'.$s->id,
                     'senha',
                     'vencido',
                     'Pedido de nova senha',
-                    $s->nome.' · CPF '.$s->cpf.' · '.$s->updated_at?->timezone(config('app.timezone'))->format('d/m/Y H:i'),
-                    '/app/motoristas'
+                    $s->nome.' · CPF '.$s->cpf.($quando ? ' · '.$quando : ''),
+                    '/app/motoristas?senha='.$s->motorista_id
                 );
             }
-            $alertas = self::ordenar($alertas);
+            $alertas = array_merge($senha, $alertas);
         }
 
         return $alertas;

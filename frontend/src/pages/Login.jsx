@@ -17,6 +17,7 @@ export default function Login() {
   const [forgot, setForgot] = useState(false)
   const [forgotCpf, setForgotCpf] = useState('')
   const [forgotMsg, setForgotMsg] = useState('')
+  const [forgotErr, setForgotErr] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
 
   const seemsCpf = useMemo(() => {
@@ -55,12 +56,19 @@ export default function Login() {
   async function pedirSenha(event) {
     event.preventDefault()
     setForgotMsg('')
+    setForgotErr('')
     setForgotLoading(true)
     try {
       const { data } = await api.post('/senha/esqueci', { cpf: forgotCpf })
       setForgotMsg(data.message || 'Se o CPF estiver cadastrado, o administrador receberá o pedido.')
     } catch (err) {
-      setForgotMsg(apiMessage(err, 'Se o CPF estiver cadastrado, o administrador receberá o pedido.'))
+      const status = err?.response?.status
+      if (status === 429) {
+        setForgotErr('Muitas tentativas. Aguarde um minuto e tente de novo.')
+      } else {
+        // Mesmo em erro de rede, não vaza se o CPF existe — mas não finja sucesso.
+        setForgotErr(apiMessage(err, 'Não foi possível enviar o pedido. Tente novamente.'))
+      }
     } finally {
       setForgotLoading(false)
     }
@@ -117,6 +125,7 @@ export default function Login() {
               onClick={() => {
                 setForgot(true)
                 setForgotMsg('')
+                setForgotErr('')
                 setForgotCpf(seemsCpf ? loginValue : '')
               }}
             >
@@ -130,6 +139,7 @@ export default function Login() {
               Informe o CPF do motorista. O administrador recebe o pedido no sino de notificações.
             </p>
             {forgotMsg && <div className="banner banner-ok" role="status">{forgotMsg}</div>}
+            {forgotErr && <div className="banner banner-danger" role="alert">{forgotErr}</div>}
             <div className="field">
               <label htmlFor="forgot-cpf">CPF</label>
               <input
