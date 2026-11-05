@@ -4,60 +4,122 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Wallace: aprovações + campos de abastecimento externo.
+ * Idempotente com o schema Diego (já tem role/is_active/motorista_id/origem/posto).
+ */
 return new class extends Migration
 {
     public function up(): void
     {
-        // 1) Usuários: "perfil" diz se é admin ou motorista; motorista_id liga o login ao cadastro do motorista.
-        //    Quem já existe (o admin) fica com perfil 'admin' automaticamente.
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('perfil', 20)->default('admin')->after('password');
-            $table->foreignId('motorista_id')->nullable()->unique()->after('perfil')
-                ->constrained('motoristas')->nullOnDelete();
-        });
+        // users.perfil só se ainda não existir (Diego usa role; perfil é opcional/legado).
+        if (Schema::hasTable('users') && ! Schema::hasColumn('users', 'perfil')) {
+            Schema::table('users', function (Blueprint $table) {
+                $after = Schema::hasColumn('users', 'password') ? 'password' : null;
+                $col = $table->string('perfil', 20)->default('admin');
+                if ($after) {
+                    $col->after($after);
+                }
+            });
+        }
 
-        // 2) Abastecimentos: o tanque passa a ser opcional (abastecimento fora da base não sai de tanque nenhum).
-        Schema::disableForeignKeyConstraints();
-        Schema::table('abastecimentos', function (Blueprint $table) {
-            $table->unsignedBigInteger('tanque_id')->nullable()->change();
-        });
-        Schema::enableForeignKeyConstraints();
+        if (Schema::hasTable('users') && ! Schema::hasColumn('users', 'motorista_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->foreignId('motorista_id')->nullable()->unique()
+                    ->constrained('motoristas')->nullOnDelete();
+            });
+        }
 
-        Schema::table('abastecimentos', function (Blueprint $table) {
-            $table->string('origem', 10)->default('base');       // 'base' ou 'externo'
-            $table->string('posto')->nullable();                 // nome do posto (só externo)
-            $table->string('nota_numero', 30)->nullable();       // número da nota fiscal (só externo)
-            $table->decimal('valor_total', 10, 2)->nullable();   // quanto foi pago (só externo)
-            $table->string('foto')->nullable();                  // foto da nota/bomba (opcional)
-            $table->string('status', 10)->default('aprovado');   // 'pendente', 'aprovado' ou 'recusado'
-            $table->string('motivo_recusa')->nullable();
-        });
+        if (Schema::hasTable('abastecimentos')) {
+            Schema::disableForeignKeyConstraints();
+            try {
+                Schema::table('abastecimentos', function (Blueprint $table) {
+                    $table->unsignedBigInteger('tanque_id')->nullable()->change();
+                });
+            } catch (\Throwable) {
+                // doctrine/dbal pode faltar; ignora se já nullable.
+            }
+            Schema::enableForeignKeyConstraints();
 
-        // 3) Lavagens e manutenções também passam por aprovação.
-        //    Os registros que já existem ficam 'aprovado' (é o valor padrão).
+            Schema::table('abastecimentos', function (Blueprint $table) {
+                if (! Schema::hasColumn('abastecimentos', 'origem')) {
+                    $table->string('origem', 10)->default('base');
+                }
+                if (! Schema::hasColumn('abastecimentos', 'posto')) {
+                    $table->string('posto')->nullable();
+                }
+                if (! Schema::hasColumn('abastecimentos', 'nota_numero')) {
+                    $table->string('nota_numero', 30)->nullable();
+                }
+                if (! Schema::hasColumn('abastecimentos', 'valor_total')) {
+                    $table->decimal('valor_total', 10, 2)->nullable();
+                }
+                if (! Schema::hasColumn('abastecimentos', 'foto')) {
+                    $table->string('foto')->nullable();
+                }
+                if (! Schema::hasColumn('abastecimentos', 'status')) {
+                    $table->string('status', 10)->default('aprovado');
+                }
+                if (! Schema::hasColumn('abastecimentos', 'motivo_recusa')) {
+                    $table->string('motivo_recusa')->nullable();
+                }
+            });
+        }
+
         foreach (['lavagens', 'manutencoes'] as $tabela) {
-            Schema::table($tabela, function (Blueprint $table) {
-                $table->string('status', 10)->default('aprovado');
-                $table->string('motivo_recusa')->nullable();
+            if (! Schema::hasTable($tabela)) {
+                continue;
+            }
+            Schema::table($tabela, function (Blueprint $table) use ($tabela) {
+                if (! Schema::hasColumn($tabela, 'status')) {
+                    $table->string('status', 10)->default('aprovado');
+                }
+                if (! Schema::hasColumn($tabela, 'motivo_recusa')) {
+                    $table->string('motivo_recusa')->nullable();
+                }
             });
         }
     }
 
     public function down(): void
     {
+        // Não remove role/motorista_id/origem do schema Diego.
         foreach (['lavagens', 'manutencoes'] as $tabela) {
-            Schema::table($tabela, function (Blueprint $table) {
-                $table->dropColumn(['status', 'motivo_recusa']);
+            if (! Schema::hasTable($tabela)) {
+                continue;
+            }
+            Schema::table($tabela, function (Blueprint $table) use ($tabela) {
+                $drop = [];
+                if (Schema::hasColumn($tabela, 'status')) {
+                    $drop[] = 'status';
+                }
+                if (Schema::hasColumn($tabela, 'motivo_recusa')) {
+                    $drop[] = 'motivo_recusa';
+                }
+                if ($drop) {
+                    $table->dropColumn($drop);
+                }
             });
         }
 
-        Schema::table('abastecimentos', function (Blueprint $table) {
-            $table->dropColumn(['origem', 'posto', 'nota_numero', 'valor_total', 'foto', 'status', 'motivo_recusa']);
-        });
+        if (Schema::hasTable('abastecimentos')) {
+            Schema::table('abastecimentos', function (Blueprint $table) {
+                $drop = [];
+                foreach (['nota_numero', 'valor_total', 'foto', 'status', 'motivo_recusa'] as $col) {
+                    if (Schema::hasColumn('abastecimentos', $col)) {
+                        $drop[] = $col;
+                    }
+                }
+                if ($drop) {
+                    $table->dropColumn($drop);
+                }
+            });
+        }
 
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropForeign(['motorista_id']);
-            $table->dropColumn(['perfil', 'motorista_id']);
-        });
+        if (Schema::hasTable('users') && Schema::hasColumn('users', 'perfil')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->dropColumn('perfil');
+            });
+        }
     }
 };

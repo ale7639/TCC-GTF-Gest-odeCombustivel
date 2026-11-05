@@ -6,12 +6,18 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-// Bloqueia o motorista nas rotas de gestão. Quem não é motorista é tratado como administrador.
+/** Bloqueia motorista nas rotas de gestão (compat mobile Wallace + role Diego). */
 class ApenasAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->perfil === 'motorista') {
+        $usuario = $request->user();
+        $ehMotorista = $usuario && (
+            $usuario->role === 'motorista'
+            || ($usuario->perfil ?? null) === 'motorista'
+        );
+
+        if ($ehMotorista) {
             return response()->json(['message' => 'Acesso restrito ao administrador.'], 403);
         }
 

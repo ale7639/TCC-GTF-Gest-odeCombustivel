@@ -1,0 +1,91 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { useAuth } from './context/AuthContext'
+import Shell from './components/Shell'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Fleet from './pages/Fleet'
+import TruckForm from './pages/TruckForm'
+import TruckDetails from './pages/TruckDetails'
+import Drivers from './pages/Drivers'
+import Tanks from './pages/Tanks'
+import TankDetails from './pages/TankDetails'
+import Fueling from './pages/Fueling'
+import ReportsHub from './pages/ReportsHub'
+import ReportPage from './pages/ReportPage'
+import Users from './pages/Users'
+import Wash from './pages/Wash'
+import Maintenance from './pages/Maintenance'
+import MaintenanceHub from './pages/MaintenanceHub'
+import PreTrip from './pages/PreTrip'
+import Tires from './pages/Tires'
+import Fines from './pages/Fines'
+import Profile from './pages/Profile'
+import Notifications from './pages/Notifications'
+
+function Private({ children }) {
+  const { token } = useAuth()
+  return token ? children : <Navigate to="/login" replace />
+}
+
+function Gestao({ children }) {
+  const { isGestao } = useAuth()
+  return isGestao ? children : <Navigate to="/app" replace />
+}
+
+function Admin({ children }) {
+  const { isAdmin } = useAuth()
+  return isAdmin ? children : <Navigate to="/app" replace />
+}
+
+/** Rotas de gestão (frota/tanques/notificações) — motorista fica só no essencial. */
+function SemMotorista({ children }) {
+  const { isMotorista } = useAuth()
+  return isMotorista ? <Navigate to="/app" replace /> : children
+}
+
+/**
+ * Classe de layout conforme o papel:
+ * - administrador → layout-web (tela cheia, desktop)
+ * - supervisor / motorista → layout-mobile (moldura de celular)
+ * - sem sessão → layout-auth (formulário limpo)
+ */
+function layoutClass({ token, isAdmin }) {
+  if (!token) return 'device layout-auth'
+  if (isAdmin) return 'device layout-web'
+  return 'device layout-mobile'
+}
+
+export default function App() {
+  const { token, isAdmin } = useAuth()
+
+  return (
+    <div className={layoutClass({ token, isAdmin })}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/app" element={<Private><Shell /></Private>}>
+          <Route index element={<Dashboard />} />
+          <Route path="perfil" element={<Profile />} />
+          <Route path="notificacoes" element={<SemMotorista><Notifications /></SemMotorista>} />
+          <Route path="frota" element={<SemMotorista><Fleet /></SemMotorista>} />
+          <Route path="frota/novo" element={<Admin><TruckForm /></Admin>} />
+          <Route path="frota/:id" element={<TruckDetails />} />
+          <Route path="frota/:id/editar" element={<Admin><TruckForm /></Admin>} />
+          <Route path="frota/:id/lavagem" element={<SemMotorista><Wash /></SemMotorista>} />
+          <Route path="frota/:id/manutencao" element={<Maintenance />} />
+          <Route path="frota/:id/pneus" element={<SemMotorista><Tires /></SemMotorista>} />
+          <Route path="manutencao" element={<MaintenanceHub />} />
+          <Route path="saida" element={<PreTrip />} />
+          <Route path="motoristas" element={<Gestao><Drivers /></Gestao>} />
+          <Route path="multas" element={<Gestao><Fines /></Gestao>} />
+          <Route path="tanques" element={<SemMotorista><Tanks /></SemMotorista>} />
+          <Route path="tanques/:id" element={<SemMotorista><TankDetails /></SemMotorista>} />
+          <Route path="abastecer" element={<Fueling />} />
+          <Route path="relatorios" element={<Gestao><ReportsHub /></Gestao>} />
+          <Route path="relatorios/:tipo" element={<Gestao><ReportPage /></Gestao>} />
+          <Route path="usuarios" element={<Admin><Users /></Admin>} />
+        </Route>
+        <Route path="*" element={<Navigate to="/app" replace />} />
+      </Routes>
+    </div>
+  )
+}

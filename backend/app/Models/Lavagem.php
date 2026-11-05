@@ -12,7 +12,10 @@ class Lavagem extends Model
 
     protected $table = 'lavagens';
 
-    protected $fillable = ['caminhao_id', 'motorista_id', 'data', 'valor', 'observacao'];
+    protected $fillable = [
+        'caminhao_id', 'motorista_id', 'data', 'valor', 'observacao',
+        'status', 'motivo_recusa',
+    ];
 
     protected $casts = [
         'data'  => 'date',

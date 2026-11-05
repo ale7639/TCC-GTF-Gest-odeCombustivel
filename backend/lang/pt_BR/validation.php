@@ -238,4 +238,8 @@ return [
         'birth_date' => 'data de nascimento'
     ],
 
+    'values' => [
+        'today' => 'hoje',
+    ],
+
 ];

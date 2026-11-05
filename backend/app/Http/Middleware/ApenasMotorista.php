@@ -7,14 +7,18 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-// Só deixa passar um motorista ATIVO e entrega o cadastro dele para o controller.
-// Se o admin inativar o motorista, o acesso é cortado na hora (mesmo com token válido).
+/** Só motorista ativo; injeta o cadastro em $request->attributes['motorista']. */
 class ApenasMotorista
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $usuario   = $request->user();
-        $motorista = ($usuario?->perfil === 'motorista' && $usuario->motorista_id)
+        $usuario = $request->user();
+        $ehMotorista = $usuario && (
+            $usuario->role === 'motorista'
+            || ($usuario->perfil ?? null) === 'motorista'
+        );
+
+        $motorista = ($ehMotorista && $usuario->motorista_id)
             ? Motorista::find($usuario->motorista_id)
             : null;
 
