@@ -308,7 +308,9 @@ h2 { font-size: 19px; letter-spacing: -0.02em; }
   box-shadow: var(--shadow-soft);
 }
 
-.stack { display: grid; gap: 12px; }
+/* align-content:start evita esmagar linhas (ex.: chips de filtro) quando
+   .scroll.stack tem altura definida pelo flex e o conteúdo ultrapassa a viewport. */
+.stack { display: grid; gap: 12px; align-content: start; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .space { justify-content: space-between; }
 .row.space { flex-wrap: nowrap; }
@@ -518,15 +520,35 @@ h2 { font-size: 19px; letter-spacing: -0.02em; }
 
 .actions { display: grid; gap: 8px; margin-top: 16px; }
 .filters {
-  display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
-  padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 2px 0 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .filters::-webkit-scrollbar { display: none; }
 .chip {
-  border: 1px solid var(--line); background: #fff; border-radius: 999px;
-  padding: 10px 14px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
-  min-height: 40px; touch-action: manipulation; flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 40px;
+  box-sizing: border-box;
+  touch-action: manipulation;
+  flex-shrink: 0;
 }
 .chip.on { background: var(--diesel); color: #fff; border-color: var(--diesel); }
 
