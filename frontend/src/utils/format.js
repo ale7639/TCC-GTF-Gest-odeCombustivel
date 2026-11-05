@@ -29,6 +29,15 @@ export function dateBr(value) {
   return day && month && year ? `${day}/${month}/${year}` : String(value)
 }
 
+/** Data local YYYY-MM-DD (evita toISOString() em UTC virar “amanhã” no Brasil). */
+export function todayLocal() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function firstName(name = '') {
   return name.split(' ')[0] || name
 }
@@ -38,7 +47,15 @@ export function fieldError(error, field) {
 }
 
 export function apiMessage(error, fallback = 'Não foi possível concluir. Verifique a conexão e tente novamente.') {
-  return error?.response?.data?.message || fallback
+  const data = error?.response?.data
+  const fieldErrors = data?.errors ? Object.values(data.errors).flat().filter(Boolean) : []
+  const firstField = fieldErrors[0]
+  const message = data?.message
+  // Prefira mensagem de campo; ignore chaves cruas de tradução (ex.: validation.before_or_equal).
+  if (firstField && !String(firstField).startsWith('validation.')) return firstField
+  if (message && !String(message).startsWith('validation.')) return message
+  if (firstField) return firstField
+  return message || fallback
 }
 
 export function statusLabel(status) {

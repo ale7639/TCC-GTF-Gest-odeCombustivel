@@ -115,6 +115,9 @@ class ManutencaoController extends Controller
             'marcar_caminhao_manutencao' => ['sometimes', 'boolean'],
             'oleo_intervalo_km' => ['nullable', 'integer', 'min:1000', 'max:100000'],
             'oleo_proxima_data' => ['nullable', 'date', 'after_or_equal:today'],
+        ], [
+            'data_realizada.before_or_equal' => 'A data em que foi feita não pode ser posterior a hoje.',
+            'oleo_proxima_data.after_or_equal' => 'A próxima data sugerida deve ser hoje ou uma data futura.',
         ]);
 
         $status = $this->normalizarStatus($dados['status']);
@@ -236,6 +239,10 @@ class ManutencaoController extends Controller
             'oleo_intervalo_km' => ['nullable', 'integer', 'min:1000', 'max:100000'],
             'oleo_proxima_data' => ['nullable', 'date', 'after_or_equal:today'],
             'liberar_caminhao' => ['sometimes', 'boolean'],
+        ], [
+            'data_realizada.required' => 'Informe a data em que a OS foi fechada.',
+            'data_realizada.before_or_equal' => 'A data em que foi feita não pode ser posterior a hoje.',
+            'oleo_proxima_data.after_or_equal' => 'A próxima data sugerida deve ser hoje ou uma data futura.',
         ]);
 
         $manutencao->update([

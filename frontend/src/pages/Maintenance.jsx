@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
 import { useAuth } from '../context/AuthContext'
-import { apiMessage, dateBr, km, money, oleoBadge, oleoLabel } from '../utils/format'
+import { apiMessage, dateBr, km, money, oleoBadge, oleoLabel, todayLocal } from '../utils/format'
 
 const TIPOS = [
   'Troca de óleo',
@@ -26,8 +26,8 @@ const CHECK_BASE = [
 
 const emptyForm = () => ({
   status: 'aberto',
-  data_prevista: new Date().toISOString().slice(0, 10),
-  data_realizada: new Date().toISOString().slice(0, 10),
+  data_prevista: todayLocal(),
+  data_realizada: todayLocal(),
   tipo: 'Troca de óleo',
   oficina: 'Oficina parceira',
   descricao: '',
@@ -365,7 +365,7 @@ export default function Maintenance() {
                 onClick={() => setConcluir({
                   id: m.id,
                   tipo: m.tipo,
-                  data_realizada: new Date().toISOString().slice(0, 10),
+                  data_realizada: todayLocal(),
                   km: String(caminhao.km_atual || m.km || ''),
                   valor: m.valor != null ? String(m.valor) : '',
                   descricao: m.descricao || '',

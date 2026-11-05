@@ -222,6 +222,62 @@ class GfcRegrasTest extends TestCase
         $this->assertNotEmpty($hub['caminhoes']);
     }
 
+    public function test_primeira_manutencao_fechada_em_caminhao_sem_oleo(): void
+    {
+        $motorista = Motorista::create([
+            'nome' => 'Novo Motorista',
+            'cpf' => '333.333.333-33',
+            'cnh' => '98765432100',
+            'telefone' => '(44) 98888-0002',
+            'ativo' => true,
+        ]);
+
+        $caminhao = Caminhao::create([
+            'placa' => 'NEW1A11',
+            'modelo' => 'VW Novo',
+            'ano' => 2024,
+            'capacidade_tanque' => 400,
+            'km_atual' => 1500,
+            'status' => 'ativo',
+            'motorista_id' => $motorista->id,
+            'oleo_ultima_data' => null,
+            'oleo_ultima_km' => null,
+            'oleo_proxima_data' => null,
+        ]);
+
+        $this->assertSame('sem_registro', $caminhao->oleo['alerta']);
+
+        $admin = $this->usuario('administrador');
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$caminhao->id.'/manutencoes', [
+            'status' => 'fechado',
+            'data_prevista' => now()->toDateString(),
+            'data_realizada' => now()->toDateString(),
+            'tipo' => 'Troca de óleo',
+            'oficina' => 'Oficina parceira',
+            'descricao' => 'Primeira troca de óleo do caminhão novo.',
+            'valor' => 500,
+            'km' => 1500,
+            'checklist' => ['Óleo e filtros'],
+            'oleo_intervalo_km' => 10000,
+        ])->assertCreated()
+            ->assertJsonPath('manutencao.status', 'fechado')
+            ->assertJsonPath('caminhao.oleo.alerta', 'ok');
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/caminhoes/'.$caminhao->id.'/manutencoes', [
+            'status' => 'fechado',
+            'data_prevista' => now()->toDateString(),
+            'data_realizada' => now()->addDay()->toDateString(),
+            'tipo' => 'Troca de filtros',
+            'oficina' => 'Oficina parceira',
+            'descricao' => 'Data futura inválida.',
+            'valor' => 100,
+            'km' => 1500,
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'A data em que foi feita não pode ser posterior a hoje.')
+            ->assertJsonPath('errors.data_realizada.0', 'A data em que foi feita não pode ser posterior a hoje.');
+    }
+
     public function test_media_km_l_aparece_no_caminhao(): void
     {
         Storage::fake('public');
