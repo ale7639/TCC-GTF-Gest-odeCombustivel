@@ -45,7 +45,7 @@ class ChecklistPreViagemController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = ChecklistPreViagem::with(['caminhao:id,placa', 'motorista:id,nome'])
-            ->orderByDesc('data')
+            ->orderByDesc('created_at')
             ->orderByDesc('id');
 
         if ($request->user()->isMotorista()) {
@@ -56,6 +56,25 @@ class ChecklistPreViagemController extends Controller
         }
 
         return response()->json($query->limit(50)->get());
+    }
+
+    /** Vigência atual do checklist (24 h) por caminhão. */
+    public function vigencia(Request $request): JsonResponse
+    {
+        $usuario = $request->user();
+        $caminhaoId = $request->integer('caminhao_id') ?: null;
+
+        if ($usuario->isMotorista()) {
+            $meu = Caminhao::where('motorista_id', $usuario->motorista_id)
+                ->where('status', '!=', 'inativo')
+                ->value('id');
+            $caminhaoId = $caminhaoId ?: $meu;
+            if ($caminhaoId && (int) $caminhaoId !== (int) $meu) {
+                return response()->json(['message' => 'Caminhão fora do seu escopo.'], 403);
+            }
+        }
+
+        return response()->json(ChecklistPreViagem::resumoVigencia($caminhaoId ?: null));
     }
 
     public function store(Request $request): JsonResponse

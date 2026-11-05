@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
@@ -10,7 +10,7 @@ export default function Fueling() {
   const [tanques, setTanques] = useState([])
   const [form, setForm] = useState({
     caminhao_id: '', origem: 'base', tanque_id: '', posto: '', litros: '', km: '',
-    data: new Date().toISOString().slice(0, 10), motivo_excesso: '',
+    data: new Date().toISOString().slice(0, 10),
   })
   const [foto, setFoto] = useState(null)
   const [error, setError] = useState('')
@@ -45,15 +45,6 @@ export default function Fueling() {
     }).then(({ data }) => setLimites(data)).catch(() => setLimites(null))
   }, [form.origem, form.tanque_id, form.caminhao_id, form.data])
 
-  const precisaMotivo = useMemo(() => {
-    if (form.origem !== 'base' || !limites?.motorista || !form.litros) return false
-    const litros = Number(form.litros)
-    const m = limites.motorista
-    if (m.limite_litros_dia != null && (m.usado_dia + litros) > m.limite_litros_dia) return true
-    if (m.credito_litros_mes != null && (m.usado_mes + litros) > m.credito_litros_mes) return true
-    return false
-  }, [form.origem, form.litros, limites])
-
   async function enviar() {
     setAsk(false)
     setError('')
@@ -79,7 +70,6 @@ export default function Fueling() {
           <p className="eyebrow">{ok.origem === 'externo' ? 'Posto' : ok.tanque?.nome}</p>
           <div className="num">{liters(ok.litros)}</div>
           <p className="muted">{ok.caminhao?.placa} · KM {ok.km}</p>
-          {ok.motivo_excesso && <p className="muted">Motivo: {ok.motivo_excesso}</p>}
           {ok.comprovante_url && <img className="preview" src={ok.comprovante_url} alt="Comprovante" />}
         </div>
         <button className="btn btn-primary" onClick={() => setOk(null)}>Novo registro</button>
@@ -134,19 +124,6 @@ export default function Fueling() {
           <label>Litros</label>
           <input type="number" step="0.01" value={form.litros} onChange={(e) => setForm({ ...form, litros: e.target.value })} required />
         </div>
-        {precisaMotivo && (
-          <div className="field">
-            <label>Motivo do excesso (obrigatório)</label>
-            <select value={form.motivo_excesso} onChange={(e) => setForm({ ...form, motivo_excesso: e.target.value })} required>
-              <option value="">Selecione</option>
-              <option value="ocioso">Veículo ocioso / fila</option>
-              <option value="desvio">Desvio de rota</option>
-              <option value="clima">Clima / estrada ruim</option>
-              <option value="carga">Carga pesada</option>
-              <option value="outro">Outro</option>
-            </select>
-          </div>
-        )}
         <div className="field">
           <label>KM do caminhão</label>
           <input type="number" value={form.km} onChange={(e) => setForm({ ...form, km: e.target.value })} required />
@@ -162,7 +139,7 @@ export default function Fueling() {
           title="Confirmar abastecimento?"
           text={form.origem === 'externo'
             ? `${form.litros} L no posto ${form.posto}.`
-            : `${form.litros} L a partir do tanque da base.${precisaMotivo ? ` Motivo: ${form.motivo_excesso}.` : ''}`}
+            : `${form.litros} L a partir do tanque da base.`}
           onCancel={() => setAsk(false)}
           onConfirm={enviar}
         />

@@ -49,13 +49,9 @@ class AbastecimentoService
             $motivo = trim((string) ($dados['motivo_excesso'] ?? ''));
             $excedeu = false;
 
+            // Motivo de excesso é opcional: não bloqueia o abastecimento.
             if ($origem === 'base' && $motorista) {
                 $excedeu = $this->excedeuLimite($motorista, $litros, $dados['data'] ?? now()->toDateString());
-                if ($excedeu && $motivo === '') {
-                    throw ValidationException::withMessages([
-                        'motivo_excesso' => 'Informe o motivo: litros acima do limite/crédito do motorista.',
-                    ]);
-                }
             }
 
             $tanqueId = null;

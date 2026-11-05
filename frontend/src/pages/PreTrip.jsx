@@ -9,6 +9,7 @@ export default function PreTrip() {
   const [caminhoes, setCaminhoes] = useState([])
   const [itensDef, setItensDef] = useState([])
   const [historico, setHistorico] = useState([])
+  const [vigencia, setVigencia] = useState(null)
   const [form, setForm] = useState(null)
   const [foto, setFoto] = useState(null)
   const [error, setError] = useState('')
@@ -20,10 +21,12 @@ export default function PreTrip() {
       api.get('/caminhoes'),
       api.get('/checklists/itens'),
       api.get('/checklists'),
-    ]).then(([c, i, h]) => {
+      api.get('/checklists/vigencia'),
+    ]).then(([c, i, h, v]) => {
       setCaminhoes(c.data.filter((x) => x.status !== 'inativo'))
       setItensDef(i.data)
       setHistorico(h.data)
+      setVigencia(v.data)
     })
   }
 
@@ -74,20 +77,37 @@ export default function PreTrip() {
   }
 
   const rotulo = (chave) => itensDef.find((i) => i.chave === chave)?.rotulo || chave
+  const precisaRefazer = vigencia && !vigencia.valido
 
   return (
     <div className="scroll stack">
       <p className="eyebrow">Pátio</p>
       <h1>Checklist pré-viagem</h1>
-      <p className="muted">Saída do pátio: conferência rápida. Item reprovado pode abrir manutenção.</p>
+      <p className="muted">Saída do pátio: conferência rápida. Vale por 24 horas — depois precisa fazer de novo.</p>
       {error && <div className="banner banner-danger">{error}</div>}
+      {precisaRefazer && !form && (
+        <div className="banner banner-danger">
+          {vigencia.expirado
+            ? 'Checklist anterior expirou (mais de 24 h). Faça a saída de novo.'
+            : 'Nenhum checklist válido. Registre a saída antes de rodar.'}
+        </div>
+      )}
+      {vigencia?.valido && !form && (
+        <div className="banner banner-ok">
+          Checklist válido até {dateBr(vigencia.expira_em, true)}.
+        </div>
+      )}
       {ok && (
         <div className={`banner ${ok.status === 'apto' ? 'banner-ok' : 'banner-danger'}`}>
-          {ok.status === 'apto' ? 'Veículo apto para viagem.' : 'Não apto — pendência de manutenção aberta se houver falha.'}
+          {ok.status === 'apto' ? 'Veículo apto para viagem (válido por 24 h).' : 'Não apto — pendência de manutenção aberta se houver falha.'}
           {ok.manutencao && <span> OS #{ok.manutencao.id}.</span>}
         </div>
       )}
-      {!form && <button className="btn btn-primary" onClick={abrir}>Nova saída</button>}
+      {!form && (
+        <button className="btn btn-primary" onClick={abrir}>
+          {precisaRefazer ? 'Nova saída (obrigatória)' : 'Nova saída'}
+        </button>
+      )}
       {form && (
         <form className="stack" onSubmit={(e) => { e.preventDefault(); setAsk(true) }}>
           <div className="field">
@@ -136,10 +156,13 @@ export default function PreTrip() {
         <div key={h.id} className="list-item">
           <div className="grow">
             <strong>{h.caminhao?.placa}</strong>
-            <p className="muted" style={{ margin: 0 }}>{dateBr(h.data)} · {h.motorista?.nome || '—'}</p>
+            <p className="muted" style={{ margin: 0 }}>
+              {dateBr(h.data)} · {h.motorista?.nome || '—'}
+              {h.expirado ? ' · expirado' : h.valido ? ' · válido' : ''}
+            </p>
           </div>
-          <span className={`badge ${h.status === 'apto' ? 'badge-ok' : 'badge-nao_apto'}`}>
-            {h.status === 'apto' ? 'Apto' : 'Não apto'}
+          <span className={`badge ${h.expirado ? 'badge-pendente' : (h.status === 'apto' ? 'badge-ok' : 'badge-nao_apto')}`}>
+            {h.expirado ? 'Expirado' : (h.status === 'apto' ? 'Apto' : 'Não apto')}
           </span>
         </div>
       ))}
@@ -147,7 +170,7 @@ export default function PreTrip() {
       {ask && (
         <Confirm
           title="Confirmar checklist?"
-          text={form.itens.some((i) => !i.ok) ? 'Há itens reprovados — status será não apto.' : 'Todos os itens OK — apto para viagem.'}
+          text={form.itens.some((i) => !i.ok) ? 'Há itens reprovados — status será não apto.' : 'Todos os itens OK — apto por 24 horas.'}
           onCancel={() => setAsk(false)}
           onConfirm={enviar}
         />

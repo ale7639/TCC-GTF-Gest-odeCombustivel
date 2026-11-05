@@ -37,6 +37,12 @@ function Admin({ children }) {
   return isAdmin ? children : <Navigate to="/app" replace />
 }
 
+/** Rotas de gestão (frota/tanques/notificações) — motorista fica só no essencial. */
+function SemMotorista({ children }) {
+  const { isMotorista } = useAuth()
+  return isMotorista ? <Navigate to="/app" replace /> : children
+}
+
 /**
  * Classe de layout conforme o papel:
  * - administrador → layout-web (tela cheia, desktop)
@@ -59,20 +65,20 @@ export default function App() {
         <Route path="/app" element={<Private><Shell /></Private>}>
           <Route index element={<Dashboard />} />
           <Route path="perfil" element={<Profile />} />
-          <Route path="notificacoes" element={<Notifications />} />
-          <Route path="frota" element={<Fleet />} />
+          <Route path="notificacoes" element={<SemMotorista><Notifications /></SemMotorista>} />
+          <Route path="frota" element={<SemMotorista><Fleet /></SemMotorista>} />
           <Route path="frota/novo" element={<Admin><TruckForm /></Admin>} />
           <Route path="frota/:id" element={<TruckDetails />} />
           <Route path="frota/:id/editar" element={<Admin><TruckForm /></Admin>} />
-          <Route path="frota/:id/lavagem" element={<Wash />} />
+          <Route path="frota/:id/lavagem" element={<SemMotorista><Wash /></SemMotorista>} />
           <Route path="frota/:id/manutencao" element={<Maintenance />} />
-          <Route path="frota/:id/pneus" element={<Tires />} />
+          <Route path="frota/:id/pneus" element={<SemMotorista><Tires /></SemMotorista>} />
           <Route path="manutencao" element={<MaintenanceHub />} />
           <Route path="saida" element={<PreTrip />} />
           <Route path="motoristas" element={<Gestao><Drivers /></Gestao>} />
           <Route path="multas" element={<Gestao><Fines /></Gestao>} />
-          <Route path="tanques" element={<Tanks />} />
-          <Route path="tanques/:id" element={<TankDetails />} />
+          <Route path="tanques" element={<SemMotorista><Tanks /></SemMotorista>} />
+          <Route path="tanques/:id" element={<SemMotorista><TankDetails /></SemMotorista>} />
           <Route path="abastecer" element={<Fueling />} />
           <Route path="relatorios" element={<Gestao><ReportsHub /></Gestao>} />
           <Route path="relatorios/:tipo" element={<Gestao><ReportPage /></Gestao>} />

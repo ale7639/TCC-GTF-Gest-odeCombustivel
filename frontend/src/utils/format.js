@@ -23,10 +23,14 @@ export function roleLabel(role) {
   }[role] || role
 }
 
-export function dateBr(value) {
+export function dateBr(value, withTime = false) {
   if (!value) return '—'
-  const [year, month, day] = String(value).slice(0, 10).split('-')
-  return day && month && year ? `${day}/${month}/${year}` : String(value)
+  const raw = String(value)
+  const [year, month, day] = raw.slice(0, 10).split('-')
+  if (!day || !month || !year) return raw
+  const date = `${day}/${month}/${year}`
+  if (!withTime || raw.length < 16) return date
+  return `${date} ${raw.slice(11, 16)}`
 }
 
 /** Data local YYYY-MM-DD (evita toISOString() em UTC virar “amanhã” no Brasil). */

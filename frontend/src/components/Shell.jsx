@@ -6,22 +6,27 @@ import { firstName, roleLabel } from '../utils/format'
 import { Icon, menuItems, quickItems } from '../navigation/navConfig'
 
 export default function Shell() {
-  const { user, isAdmin, isGestao, logout } = useAuth()
+  const { user, isAdmin, isGestao, isMotorista, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const [naoLidas, setNaoLidas] = useState(0)
   const navigate = useNavigate()
   const location = useLocation()
-  const drawer = menuItems({ isGestao, isAdmin })
-  const quick = quickItems({ isGestao })
+  const drawer = menuItems({ isGestao, isAdmin, isMotorista })
+  const quick = quickItems({ isGestao, isMotorista })
 
   const atualizarBadge = useCallback(() => {
+    if (isMotorista) {
+      setNaoLidas(0)
+      return
+    }
     api.get('/notificacoes/resumo')
       .then(({ data }) => setNaoLidas(data.nao_lidas || 0))
       .catch(() => { /* silencioso: badge não bloqueia o app */ })
-  }, [])
+  }, [isMotorista])
 
   useEffect(() => {
     atualizarBadge()
+    if (isMotorista) return undefined
     const onFocus = () => atualizarBadge()
     const onCustom = () => atualizarBadge()
     window.addEventListener('focus', onFocus)
@@ -32,7 +37,7 @@ export default function Shell() {
       window.removeEventListener('gfc:notificacoes', onCustom)
       clearInterval(timer)
     }
-  }, [atualizarBadge, location.pathname])
+  }, [atualizarBadge, location.pathname, isMotorista])
 
   async function sair() {
     setOpen(false)
@@ -106,7 +111,7 @@ export default function Shell() {
               <small>{firstName(user?.name)} · {roleLabel(user?.role)}</small>
             </div>
           </div>
-          {bellButton}
+          {!isMotorista && bellButton}
         </header>
 
         <Outlet />

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { dateBr, firstName, liters } from '../utils/format'
 
 export default function Dashboard() {
-  const { user, isGestao } = useAuth()
+  const { user, isGestao, isMotorista } = useAuth()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -15,6 +15,68 @@ export default function Dashboard() {
 
   if (error) return <div className="scroll"><div className="banner banner-danger">{error}</div></div>
   if (!data) return <div className="scroll"><p className="muted">Carregando…</p></div>
+
+  if (isMotorista) {
+    const checklist = data.checklist_saida
+    const precisaSaida = !checklist?.valido
+    const caminhao = data.meu_caminhao
+
+    return (
+      <div className="scroll stack">
+        <header className="page-head">
+          <p className="eyebrow">Seu turno</p>
+          <h1>Olá, {firstName(user?.name)}</h1>
+        </header>
+
+        {caminhao ? (
+          <div className="card">
+            <p className="eyebrow">Seu caminhão</p>
+            <strong className="plate" style={{ fontSize: 22 }}>{caminhao.placa}</strong>
+            <p className="muted" style={{ margin: '4px 0 0' }}>{caminhao.modelo} · KM {caminhao.km_atual}</p>
+          </div>
+        ) : (
+          <div className="banner banner-danger">Nenhum caminhão vinculado à sua conta.</div>
+        )}
+
+        {precisaSaida && (
+          <div className="banner banner-danger">
+            Checklist de saída pendente{checklist?.expirado ? ' (venceu após 24 h)' : ''}.
+            {' '}Faça de novo antes de sair.
+          </div>
+        )}
+        {checklist?.valido && (
+          <div className="banner banner-ok">
+            Checklist válido até {dateBr(checklist.expira_em, true)}.
+          </div>
+        )}
+
+        <div className="stack dash-actions">
+          <Link className="btn btn-fuel" to="/app/abastecer">Registrar abastecimento</Link>
+          <Link className={`btn ${precisaSaida ? 'btn-primary' : 'btn-soft'}`} to="/app/saida">
+            {precisaSaida ? 'Fazer checklist de saída' : 'Checklist de saída'}
+          </Link>
+          <Link className="btn btn-soft" to="/app/manutencao">Manutenção</Link>
+        </div>
+
+        <section className="stack">
+          <h2>Seus abastecimentos</h2>
+          <div className="list">
+            {data.ultimos_abastecimentos.length === 0 && <p className="muted">Nenhum abastecimento ainda.</p>}
+            {data.ultimos_abastecimentos.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="truck-thumb">{item.placa?.slice(0, 3)}</div>
+                <div className="grow">
+                  <strong className="plate" style={{ fontSize: 18 }}>{item.placa}</strong>
+                  <p className="muted" style={{ margin: 0 }}>{dateBr(item.data)} · {item.origem === 'externo' ? 'Posto' : item.tanque}</p>
+                </div>
+                <strong>{liters(item.litros)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="scroll stack">

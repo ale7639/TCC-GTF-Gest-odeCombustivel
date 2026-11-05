@@ -22,13 +22,27 @@ export const Icon = {
   tank: (
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v2H7V4Zm-1 3h12a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a2 2 0 0 1 2-2Zm2 3v8h8v-2.5c-1.2 0-2-.8-2-2s.8-2 2-2V10H8Z" fill="currentColor" /></svg>
   ),
+  check: (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.6 4.8 12.2l1.4-1.4 3 3 8-8 1.4 1.4-9.4 9.4Z" fill="currentColor" /></svg>
+  ),
   bell: (
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v2.2c0 .7-.2 1.3-.6 1.9L4.2 15.4A1 1 0 0 0 5 17h14a1 1 0 0 0 .8-1.6l-1.2-2.3c-.4-.6-.6-1.2-.6-1.9V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 21Z" fill="currentColor" /></svg>
   ),
 }
 
 /** Menu lateral / drawer completo, filtrado por papel. */
-export function menuItems({ isGestao, isAdmin }) {
+export function menuItems({ isGestao, isAdmin, isMotorista }) {
+  // Motorista: só o que precisa no dia a dia (abastecer o caminhão, manutenção, checklist).
+  if (isMotorista) {
+    return [
+      { to: '/app', label: 'Início', end: true },
+      { to: '/app/abastecer', label: 'Abastecer' },
+      { to: '/app/manutencao', label: 'Manutenção' },
+      { to: '/app/saida', label: 'Checklist saída' },
+      { to: '/app/perfil', label: 'Meu perfil' },
+    ]
+  }
+
   const base = [
     { to: '/app', label: 'Início', end: true },
     { to: '/app/perfil', label: 'Meu perfil' },
@@ -51,7 +65,15 @@ export function menuItems({ isGestao, isAdmin }) {
 }
 
 /** Barra inferior de atalhos (mobile / papéis de campo). */
-export function quickItems({ isGestao }) {
+export function quickItems({ isGestao, isMotorista }) {
+  if (isMotorista) {
+    return [
+      { to: '/app', label: 'Início', icon: Icon.home, end: true },
+      { to: '/app/abastecer', label: 'Abastecer', icon: Icon.fuel },
+      { to: '/app/manutencao', label: 'Manutenção', icon: Icon.wrench },
+      { to: '/app/saida', label: 'Saída', icon: Icon.check },
+    ]
+  }
   if (isGestao) {
     return [
       { to: '/app', label: 'Início', icon: Icon.home, end: true },

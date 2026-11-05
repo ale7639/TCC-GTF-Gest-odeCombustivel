@@ -307,4 +307,69 @@ class GfcRegrasTest extends TestCase
             ->assertOk()
             ->assertJsonPath('media_km_l', 3);
     }
+
+    public function test_abastecimento_acima_do_limite_sem_motivo_nao_bloqueia(): void
+    {
+        $frota = $this->frota();
+        $frota['motorista']->update([
+            'limite_litros_dia' => 50,
+            'credito_litros_mes' => 200,
+        ]);
+        $user = $this->usuario('motorista', $frota['motorista']->id);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/abastecimentos', [
+            'caminhao_id' => $frota['caminhao']->id,
+            'origem' => 'base',
+            'tanque_id' => $frota['tanque']->id,
+            'litros' => 80,
+            'km' => 100050,
+            'data' => now()->toDateString(),
+        ])->assertCreated()
+            ->assertJsonPath('litros', 80);
+
+        $this->assertNull($frota['caminhao']->fresh()->abastecimentos()->latest('id')->first()->motivo_excesso);
+    }
+
+    public function test_checklist_saida_expira_apos_24_horas(): void
+    {
+        $frota = $this->frota();
+        $user = $this->usuario('motorista', $frota['motorista']->id);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/checklists', [
+            'caminhao_id' => $frota['caminhao']->id,
+            'data' => now()->toDateString(),
+            'itens' => [
+                ['chave' => 'freios', 'ok' => true],
+                ['chave' => 'luzes', 'ok' => true],
+                ['chave' => 'pneus', 'ok' => true],
+                ['chave' => 'oleo_agua', 'ok' => true],
+                ['chave' => 'extintor', 'ok' => true],
+                ['chave' => 'documentos', 'ok' => true],
+                ['chave' => 'para_brisas', 'ok' => true],
+                ['chave' => 'estepe', 'ok' => true],
+            ],
+        ])->assertCreated()->assertJsonPath('status', 'apto');
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/checklists/vigencia')
+            ->assertOk()
+            ->assertJsonPath('valido', true)
+            ->assertJsonPath('pendente', false);
+
+        $checklist = \App\Models\ChecklistPreViagem::query()->latest('id')->first();
+        $checklist->created_at = now()->subHours(25);
+        $checklist->save();
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/checklists/vigencia')
+            ->assertOk()
+            ->assertJsonPath('valido', false)
+            ->assertJsonPath('expirado', true)
+            ->assertJsonPath('pendente', true);
+
+        $dash = $this->actingAs($user, 'sanctum')->getJson('/api/dashboard')->assertOk()->json();
+        $this->assertTrue($dash['checklist_saida']['pendente']);
+        $this->assertSame($frota['caminhao']->placa, $dash['meu_caminhao']['placa']);
+        $this->assertSame([], $dash['tanques']);
+    }
 }

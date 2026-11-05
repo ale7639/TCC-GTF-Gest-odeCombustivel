@@ -48,6 +48,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/tanques/{tanque}', [TanqueController::class, 'show']);
 
     Route::get('/checklists/itens', [ChecklistPreViagemController::class, 'itens']);
+    Route::get('/checklists/vigencia', [ChecklistPreViagemController::class, 'vigencia']);
     Route::get('/checklists', [ChecklistPreViagemController::class, 'index']);
     Route::post('/checklists', [ChecklistPreViagemController::class, 'store']);
 

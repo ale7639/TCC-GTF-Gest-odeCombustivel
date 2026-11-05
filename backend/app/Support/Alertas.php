@@ -195,6 +195,18 @@ class Alertas
 
         $caminhao = Caminhao::where('motorista_id', $motoristaId)->where('status', '!=', 'inativo')->first();
         if ($caminhao) {
+            $saida = ChecklistPreViagem::resumoVigencia($caminhao->id);
+            if ($saida['pendente']) {
+                $alertas[] = self::item(
+                    'checklist-saida:'.$caminhao->id.':'.($saida['expirado'] ? 'expirado' : 'pendente'),
+                    'checklist',
+                    'vencido',
+                    $saida['expirado'] ? 'Checklist de saída expirado' : 'Checklist de saída pendente',
+                    $caminhao->placa.' · refazer a cada 24 h',
+                    '/app/saida'
+                );
+            }
+
             $oleo = Oleo::resumo($caminhao);
             if (in_array($oleo['alerta'], ['atrasado', 'proximo', 'sem_registro'], true)) {
                 $alertas[] = self::item(
@@ -203,7 +215,7 @@ class Alertas
                     $oleo['alerta'] === 'atrasado' ? 'vencido' : 'proximo',
                     $oleo['rotulo'],
                     $caminhao->placa,
-                    '/app/frota/'.$caminhao->id.'/manutencao'
+                    '/app/manutencao'
                 );
             }
 
@@ -216,7 +228,7 @@ class Alertas
                         $a['nivel'],
                         $a['nivel'] === 'vencido' ? "$label vencido" : "$label perto do vencimento",
                         $caminhao->placa.' · '.($a['nivel'] === 'vencido' ? 'vencido há '.$a['dias'].' dias' : 'vence em '.$a['dias'].' dias'),
-                        '/app/frota/'.$caminhao->id
+                        '/app/manutencao'
                     );
                 }
             }
