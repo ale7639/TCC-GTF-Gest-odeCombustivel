@@ -1,31 +1,42 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
 import DateField from '../components/DateField'
 import ImageField from '../components/ImageField'
-import { apiMessage, liters, todayLocal } from '../utils/format'
+import { apiMessage, dateBr, liters, todayLocal } from '../utils/format'
+
+const formVazio = () => ({
+  caminhao_id: '', origem: 'base', tanque_id: '', posto: '', litros: '', km: '',
+  data: todayLocal(),
+})
 
 export default function Fueling() {
   const [caminhoes, setCaminhoes] = useState([])
   const [tanques, setTanques] = useState([])
-  const [form, setForm] = useState({
-    caminhao_id: '', origem: 'base', tanque_id: '', posto: '', litros: '', km: '',
-    data: todayLocal(),
-  })
+  const [historico, setHistorico] = useState([])
+  const [form, setForm] = useState(formVazio)
   const [foto, setFoto] = useState(null)
   const [error, setError] = useState('')
-  const [ok, setOk] = useState(null)
+  const [okMsg, setOkMsg] = useState('')
   const [ask, setAsk] = useState(false)
   const [limites, setLimites] = useState(null)
 
+  const carregarHistorico = useCallback(() => (
+    api.get('/abastecimentos').then(({ data }) => setHistorico((data || []).slice(0, 30)))
+  ), [])
+
   useEffect(() => {
     api.get('/caminhoes').then(({ data }) => {
-      setCaminhoes(data.filter((c) => c.status !== 'inativo'))
-      if (data.length === 1) setForm((f) => ({ ...f, caminhao_id: data[0].id, km: data[0].km_atual }))
+      const ativos = data.filter((c) => c.status !== 'inativo')
+      setCaminhoes(ativos)
+      if (ativos.length === 1) {
+        setForm((f) => ({ ...f, caminhao_id: ativos[0].id, km: ativos[0].km_atual }))
+      }
     })
     api.get('/tanques').then(({ data }) => setTanques(data))
-  }, [])
+    carregarHistorico().catch(() => {})
+  }, [carregarHistorico])
 
   useEffect(() => {
     const c = caminhoes.find((x) => String(x.id) === String(form.caminhao_id))
@@ -49,6 +60,7 @@ export default function Fueling() {
   async function enviar() {
     setAsk(false)
     setError('')
+    setOkMsg('')
     const body = new FormData()
     Object.entries(form).forEach(([k, v]) => {
       if (v !== '' && v != null) body.append(k, v)
@@ -56,27 +68,19 @@ export default function Fueling() {
     if (form.origem === 'externo' && foto) body.append('comprovante', foto)
     try {
       const { data } = await api.post('/abastecimentos', body)
-      setOk(data)
+      setOkMsg(`Abastecimento de ${liters(data.litros)} registrado.`)
       setFoto(null)
+      const placa = caminhoes.find((c) => String(c.id) === String(form.caminhao_id))
+      setForm({
+        ...formVazio(),
+        caminhao_id: form.caminhao_id,
+        km: data.caminhao?.km_atual || placa?.km_atual || form.km,
+        origem: 'base',
+      })
+      await carregarHistorico()
     } catch (err) {
       setError(apiMessage(err))
     }
-  }
-
-  if (ok) {
-    return (
-      <div className="scroll stack">
-        <div className="banner banner-ok">Abastecimento registrado.</div>
-        <div className="card">
-          <p className="eyebrow">{ok.origem === 'externo' ? 'Posto' : ok.tanque?.nome}</p>
-          <div className="num">{liters(ok.litros)}</div>
-          <p className="muted">{ok.caminhao?.placa} · KM {ok.km}</p>
-          {ok.comprovante_url && <img className="preview" src={ok.comprovante_url} alt="Comprovante" />}
-        </div>
-        <button className="btn btn-primary" onClick={() => setOk(null)}>Novo registro</button>
-        <Link className="btn btn-soft" to="/app">Voltar ao painel</Link>
-      </div>
-    )
   }
 
   return (
@@ -84,6 +88,7 @@ export default function Fueling() {
       <p className="eyebrow">Combustível</p>
       <h1>Abastecer</h1>
       {error && <div className="banner banner-danger">{error}</div>}
+      {okMsg && <div className="banner banner-ok">{okMsg}</div>}
       <form className="stack" onSubmit={(e) => { e.preventDefault(); setAsk(true) }}>
         <div className="field">
           <label>Caminhão</label>
@@ -137,6 +142,28 @@ export default function Fueling() {
         />
         <button className="btn btn-fuel">Continuar</button>
       </form>
+
+      <section className="stack">
+        <h2>Últimos abastecimentos</h2>
+        {historico.length === 0 && <p className="muted">Nenhum abastecimento ainda.</p>}
+        <div className="list">
+          {historico.map((a) => (
+            <div key={a.id} className="list-item">
+              <div className="truck-thumb">{(a.caminhao?.placa || '—').slice(0, 3)}</div>
+              <div className="grow">
+                <strong className="plate" style={{ fontSize: 18 }}>{a.caminhao?.placa || '—'}</strong>
+                <p className="muted" style={{ margin: 0 }}>
+                  {dateBr(a.data)} · {a.origem === 'externo' ? (a.posto || 'Posto') : (a.tanque?.nome || 'Base')}
+                </p>
+              </div>
+              <strong>{liters(a.litros)}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <Link className="link" to="/app">← Painel</Link>
+
       {ask && (
         <Confirm
           title="Confirmar abastecimento?"

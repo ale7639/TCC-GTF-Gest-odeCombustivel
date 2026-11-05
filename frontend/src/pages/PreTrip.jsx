@@ -153,22 +153,26 @@ export default function PreTrip() {
           <button type="button" className="btn btn-soft" onClick={() => setForm(null)}>Cancelar</button>
         </form>
       )}
-      <h2>Últimas saídas</h2>
-      {historico.length === 0 && <p className="muted">Nenhum checklist ainda.</p>}
-      {historico.map((h) => (
-        <div key={h.id} className="list-item">
-          <div className="grow">
-            <strong>{h.caminhao?.placa}</strong>
-            <p className="muted" style={{ margin: 0 }}>
-              {dateBr(h.data)} · {h.motorista?.nome || '—'}
-              {h.expirado ? ' · expirado' : h.valido ? ' · válido' : ''}
-            </p>
-          </div>
-          <span className={`badge ${h.expirado ? 'badge-pendente' : (h.status === 'apto' ? 'badge-ok' : 'badge-nao_apto')}`}>
-            {h.expirado ? 'Expirado' : (h.status === 'apto' ? 'Apto' : 'Não apto')}
-          </span>
+      <section className="stack">
+        <h2>Últimas saídas</h2>
+        {historico.length === 0 && <p className="muted">Nenhum checklist ainda.</p>}
+        <div className="list">
+          {historico.map((h) => (
+            <div key={h.id} className="list-item">
+              <div className="grow">
+                <strong>{h.caminhao?.placa}</strong>
+                <p className="muted" style={{ margin: 0 }}>
+                  {dateBr(h.data)} · {h.motorista?.nome || '—'}
+                  {h.expirado ? ' · expirado' : h.valido ? ' · válido' : ''}
+                </p>
+              </div>
+              <span className={`badge ${h.expirado ? 'badge-pendente' : (h.status === 'apto' ? 'badge-ok' : 'badge-nao_apto')}`}>
+                {h.expirado ? 'Expirado' : (h.status === 'apto' ? 'Apto' : 'Não apto')}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      </section>
       <Link className="link" to="/app">← Painel</Link>
       {ask && (
         <Confirm

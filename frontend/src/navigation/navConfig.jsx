@@ -66,12 +66,12 @@ export function menuItems({ isGestao, isAdmin, isMotorista }) {
 
 /** Barra inferior de atalhos (mobile / papéis de campo). */
 export function quickItems({ isGestao, isMotorista }) {
+  // Motorista: só 3 atalhos — checklist de saída fica na home / drawer.
   if (isMotorista) {
     return [
       { to: '/app', label: 'Início', icon: Icon.home, end: true },
       { to: '/app/abastecer', label: 'Abastecer', icon: Icon.fuel },
       { to: '/app/manutencao', label: 'Manutenção', icon: Icon.wrench },
-      { to: '/app/saida', label: 'Saída', icon: Icon.check },
     ]
   }
   if (isGestao) {
