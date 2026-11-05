@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
+import DateField from '../components/DateField'
 import { useAuth } from '../context/AuthContext'
-import { apiMessage, dateBr, km, oleoBadge, oleoLabel } from '../utils/format'
+import { apiMessage, dateBr, km, oleoBadge, oleoLabel, todayLocal } from '../utils/format'
 
 const POS = ['DE', 'DD', 'TE', 'TD', 'EE1', 'ED1', 'EE2', 'ED2', 'estepe']
 
@@ -46,7 +47,7 @@ export default function Tires() {
       {error && <div className="banner banner-danger">{error}</div>}
       {isGestao && !form && (
         <button className="btn btn-primary" onClick={() => setForm({
-          posicao: 'DE', data_troca: new Date().toISOString().slice(0, 10), km_troca: '', intervalo_km: 60000, observacao: '',
+          posicao: 'DE', data_troca: todayLocal(), km_troca: '', intervalo_km: 60000, observacao: '',
         })}>
           Registrar troca
         </button>
@@ -59,7 +60,11 @@ export default function Tires() {
               {POS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <div className="field"><label>Data da troca</label><input type="date" value={form.data_troca} onChange={(e) => setForm({ ...form, data_troca: e.target.value })} /></div>
+          <DateField
+            label="Data da troca"
+            value={form.data_troca}
+            onChange={(data_troca) => setForm({ ...form, data_troca })}
+          />
           <div className="field"><label>KM na troca</label><input type="number" value={form.km_troca} onChange={(e) => setForm({ ...form, km_troca: e.target.value })} /></div>
           <div className="field"><label>Intervalo (km)</label><input type="number" value={form.intervalo_km} onChange={(e) => setForm({ ...form, intervalo_km: e.target.value })} /></div>
           <button className="btn btn-primary">Salvar</button>

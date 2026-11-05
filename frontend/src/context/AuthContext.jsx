@@ -22,8 +22,8 @@ export function AuthProvider({ children }) {
       isAdmin: role === 'administrador',
       isGestao: role === 'administrador' || role === 'supervisor',
       isMotorista: role === 'motorista',
-      async login(email, password) {
-        const { data } = await api.post('/login', { email, password })
+      async login(loginValue, password) {
+        const { data } = await api.post('/login', { login: loginValue, password })
         localStorage.setItem('gfc_token', data.token)
         localStorage.setItem('gfc_user', JSON.stringify(data.user))
         setToken(data.token)

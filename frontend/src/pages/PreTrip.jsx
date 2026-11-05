@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
+import DateField from '../components/DateField'
 import ImageField from '../components/ImageField'
-import { apiMessage, dateBr } from '../utils/format'
+import { apiMessage, dateBr, todayLocal } from '../utils/format'
 
 export default function PreTrip() {
   const [caminhoes, setCaminhoes] = useState([])
@@ -38,7 +39,7 @@ export default function PreTrip() {
     setFoto(null)
     setForm({
       caminhao_id: caminhoes[0]?.id || '',
-      data: new Date().toISOString().slice(0, 10),
+      data: todayLocal(),
       observacao: '',
       abrir_manutencao: true,
       itens: itensDef.map((it) => ({ chave: it.chave, ok: true, observacao: '' })),
@@ -116,10 +117,12 @@ export default function PreTrip() {
               {caminhoes.map((c) => <option key={c.id} value={c.id}>{c.placa} · {c.modelo}</option>)}
             </select>
           </div>
-          <div className="field">
-            <label>Data</label>
-            <input type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required />
-          </div>
+          <DateField
+            label="Data"
+            value={form.data}
+            onChange={(data) => setForm({ ...form, data })}
+            required
+          />
           {form.itens.map((it) => (
             <div key={it.chave} className="card" style={{ padding: 12 }}>
               <div className="row space">

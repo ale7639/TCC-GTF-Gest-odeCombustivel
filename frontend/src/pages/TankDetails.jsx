@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
-import ImageField from '../components/ImageField'
 import Confirm from '../components/Confirm'
+import DateField from '../components/DateField'
+import ImageField from '../components/ImageField'
 import { useAuth } from '../context/AuthContext'
-import { apiMessage, dateBr, liters, money } from '../utils/format'
+import { apiMessage, dateBr, liters, money, todayLocal } from '../utils/format'
 
 export default function TankDetails() {
   const { id } = useParams()
@@ -60,12 +61,12 @@ export default function TankDetails() {
       {isGestao && !form && !concForm && (
         <>
           <button className="btn btn-fuel" onClick={() => setForm({
-            data: new Date().toISOString().slice(0, 10), litros: '', valor_total: '', numero: '', fornecedor: '',
+            data: todayLocal(), litros: '', valor_total: '', numero: '', fornecedor: '',
           })}>
             Entrada com nota fiscal
           </button>
           <button className="btn btn-soft" onClick={async () => {
-            const data = new Date().toISOString().slice(0, 10)
+            const data = todayLocal()
             const { data: prev } = await api.get(`/tanques/${id}/conciliacoes/preview`, { params: { data } })
             setConc(prev)
             setConcForm({ data, nivel_informado: String(tanque.nivel_atual), observacao: '' })
@@ -96,12 +97,17 @@ export default function TankDetails() {
               Entradas {liters(conc.entradas_dia)} · Saídas {liters(conc.saidas_dia)} · Nível sistema {liters(conc.nivel_sistema)}
             </p>
           )}
-          <div className="field"><label>Data</label><input type="date" value={concForm.data} onChange={async (e) => {
-            const data = e.target.value
-            setConcForm({ ...concForm, data })
-            const { data: prev } = await api.get(`/tanques/${id}/conciliacoes/preview`, { params: { data } })
-            setConc(prev)
-          }} required /></div>
+          <DateField
+            label="Data"
+            value={concForm.data}
+            required
+            onChange={async (data) => {
+              setConcForm({ ...concForm, data })
+              if (!data) return
+              const { data: prev } = await api.get(`/tanques/${id}/conciliacoes/preview`, { params: { data } })
+              setConc(prev)
+            }}
+          />
           <div className="field"><label>Nível medido (L)</label><input type="number" step="0.01" value={concForm.nivel_informado} onChange={(e) => setConcForm({ ...concForm, nivel_informado: e.target.value })} required /></div>
           <div className="field"><label>Observação</label><input value={concForm.observacao} onChange={(e) => setConcForm({ ...concForm, observacao: e.target.value })} /></div>
           <button className="btn btn-primary">Salvar conciliação</button>
@@ -112,7 +118,12 @@ export default function TankDetails() {
         <form className="card stack" onSubmit={(e) => { e.preventDefault(); setAsk(true) }}>
           <h2>Nota de entrada</h2>
           <p className="muted">Quando o caminhão-tanque da distribuidora abastece este tanque da base.</p>
-          <div className="field"><label>Data</label><input type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required /></div>
+          <DateField
+            label="Data"
+            value={form.data}
+            onChange={(data) => setForm({ ...form, data })}
+            required
+          />
           <div className="field"><label>Litros</label><input type="number" step="0.01" value={form.litros} onChange={(e) => setForm({ ...form, litros: e.target.value })} required /></div>
           <div className="field"><label>Valor (R$)</label><input type="number" step="0.01" value={form.valor_total} onChange={(e) => setForm({ ...form, valor_total: e.target.value })} required /></div>
           <div className="field"><label>Número da NF</label><input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required /></div>

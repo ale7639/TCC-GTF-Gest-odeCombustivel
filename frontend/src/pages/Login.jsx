@@ -1,28 +1,49 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { apiMessage } from '../utils/format'
+import { apiMessage, digitsOnly, maskCpf } from '../utils/format'
 
 /**
- * Login só com e-mail e senha — sem atalhos de contas de demonstração.
+ * Login unificado: gestão com e-mail; motorista com CPF.
+ * Sem atalhos de papel — o backend decide pelo conteúdo do campo.
  */
 export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [loginValue, setLoginValue] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const seemsCpf = useMemo(() => {
+    const d = digitsOnly(loginValue)
+    return d.length > 0 && /^\d+$/.test(loginValue.replace(/[.\-\s]/g, '')) && d.length <= 11
+      && !loginValue.includes('@')
+  }, [loginValue])
+
+  function onLoginChange(raw) {
+    if (raw.includes('@')) {
+      setLoginValue(raw)
+      return
+    }
+    const d = digitsOnly(raw)
+    // Digitando só números → máscara de CPF; senão texto livre (e-mail parcial).
+    if (d.length > 0 && d.length <= 11 && /^[\d.\-\s]*$/.test(raw)) {
+      setLoginValue(maskCpf(d))
+      return
+    }
+    setLoginValue(raw)
+  }
 
   async function submit(event) {
     event.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
+      await login(loginValue.trim(), password)
       navigate('/app')
     } catch (err) {
-      setError(apiMessage(err, 'E-mail ou senha inválidos.'))
+      setError(apiMessage(err, 'Credenciais inválidas.'))
     } finally {
       setLoading(false)
     }
@@ -39,19 +60,21 @@ export default function Login() {
           </div>
         </div>
         <h1>Entre na sua conta</h1>
-        <p>Use o e-mail e a senha fornecidos pela gestão da frota.</p>
+        <p>Gestão usa e-mail. Motorista entra com o CPF cadastrado e a senha.</p>
       </div>
       <div className="scroll">
         <form className="stack auth-form" onSubmit={submit}>
           {error && <div className="banner banner-danger" role="alert">{error}</div>}
           <div className="field">
-            <label htmlFor="email">E-mail</label>
+            <label htmlFor="login">{seemsCpf ? 'CPF' : 'E-mail ou CPF'}</label>
             <input
-              id="email"
-              type="email"
+              id="login"
+              type="text"
+              inputMode={seemsCpf ? 'numeric' : 'email'}
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder={seemsCpf ? '000.000.000-00' : 'e-mail ou CPF'}
+              value={loginValue}
+              onChange={(e) => onLoginChange(e.target.value)}
               required
             />
           </div>

@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
+import DateField from '../components/DateField'
 import ImageField from '../components/ImageField'
-import { apiMessage, liters } from '../utils/format'
+import { apiMessage, liters, todayLocal } from '../utils/format'
 
 export default function Fueling() {
   const [caminhoes, setCaminhoes] = useState([])
   const [tanques, setTanques] = useState([])
   const [form, setForm] = useState({
     caminhao_id: '', origem: 'base', tanque_id: '', posto: '', litros: '', km: '',
-    data: new Date().toISOString().slice(0, 10),
+    data: todayLocal(),
   })
   const [foto, setFoto] = useState(null)
   const [error, setError] = useState('')
@@ -128,10 +129,12 @@ export default function Fueling() {
           <label>KM do caminhão</label>
           <input type="number" value={form.km} onChange={(e) => setForm({ ...form, km: e.target.value })} required />
         </div>
-        <div className="field">
-          <label>Data</label>
-          <input type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required />
-        </div>
+        <DateField
+          label="Data"
+          value={form.data}
+          onChange={(data) => setForm({ ...form, data })}
+          required
+        />
         <button className="btn btn-fuel">Continuar</button>
       </form>
       {ask && (

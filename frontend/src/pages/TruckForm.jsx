@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../api/client'
+import DateField from '../components/DateField'
 import { apiMessage, fieldError } from '../utils/format'
 
 const vazio = {
@@ -103,14 +104,16 @@ export default function TruckForm() {
             {motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>
         </div>
-        <div className="field">
-          <label>Validade CRLV</label>
-          <input type="date" value={form.crlv_validade || ''} onChange={(e) => set('crlv_validade', e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Validade seguro</label>
-          <input type="date" value={form.seguro_validade || ''} onChange={(e) => set('seguro_validade', e.target.value)} />
-        </div>
+        <DateField
+          label="Validade CRLV"
+          value={form.crlv_validade || ''}
+          onChange={(v) => set('crlv_validade', v)}
+        />
+        <DateField
+          label="Validade seguro"
+          value={form.seguro_validade || ''}
+          onChange={(v) => set('seguro_validade', v)}
+        />
         <div className="field">
           <label>Meta km/L</label>
           <input type="number" step="0.01" value={form.meta_km_l} onChange={(e) => set('meta_km_l', e.target.value)} placeholder="ex.: 2.8" />

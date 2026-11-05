@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
-import { apiMessage, dateBr, money } from '../utils/format'
+import { apiMessage, dateBr, money, todayLocal } from '../utils/format'
 
 export default function Wash() {
   const { id } = useParams()
@@ -18,7 +18,7 @@ export default function Wash() {
   async function registrar() {
     setAsk(false)
     try {
-      await api.post(`/caminhoes/${id}/lavagens`, { data: new Date().toISOString().slice(0, 10), valor: 0 })
+      await api.post(`/caminhoes/${id}/lavagens`, { data: todayLocal(), valor: 0 })
       await carregar()
     } catch (err) {
       setError(apiMessage(err))

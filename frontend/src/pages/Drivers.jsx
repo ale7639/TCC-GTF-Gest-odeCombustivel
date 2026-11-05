@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
+import DateField from '../components/DateField'
 import EmptyState from '../components/EmptyState'
 import { useAuth } from '../context/AuthContext'
 import { apiMessage } from '../utils/format'
@@ -96,7 +97,11 @@ export default function Drivers() {
           <div className="field"><label>Nome</label><input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required /></div>
           <div className="field"><label>CPF</label><input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} required /></div>
           <div className="field"><label>CNH</label><input value={form.cnh} onChange={(e) => setForm({ ...form, cnh: e.target.value })} required /></div>
-          <div className="field"><label>Validade CNH</label><input type="date" value={form.cnh_validade?.slice?.(0, 10) || form.cnh_validade || ''} onChange={(e) => setForm({ ...form, cnh_validade: e.target.value })} /></div>
+          <DateField
+            label="Validade CNH"
+            value={form.cnh_validade?.slice?.(0, 10) || form.cnh_validade || ''}
+            onChange={(cnh_validade) => setForm({ ...form, cnh_validade })}
+          />
           <div className="field"><label>Telefone</label><input value={form.telefone || ''} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="(44) 99999-0000" /></div>
           <div className="field"><label>Limite litros / dia (base)</label><input type="number" step="0.01" value={form.limite_litros_dia ?? ''} onChange={(e) => setForm({ ...form, limite_litros_dia: e.target.value })} placeholder="ex.: 400" /></div>
           <div className="field"><label>Crédito litros / mês (base)</label><input type="number" step="0.01" value={form.credito_litros_mes ?? ''} onChange={(e) => setForm({ ...form, credito_litros_mes: e.target.value })} placeholder="ex.: 4000" /></div>

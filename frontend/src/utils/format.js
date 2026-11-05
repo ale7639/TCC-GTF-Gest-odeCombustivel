@@ -42,6 +42,50 @@ export function todayLocal() {
   return `${y}-${m}-${day}`
 }
 
+export function digitsOnly(value) {
+  return String(value || '').replace(/\D+/g, '')
+}
+
+/** Máscara visual 000.000.000-00 a partir dos dígitos. */
+export function maskCpf(value) {
+  const d = digitsOnly(value).slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
+/** ISO yyyy-mm-dd → dd/mm/aaaa (vazio se inválido). */
+export function isoToBr(iso) {
+  if (!iso) return ''
+  const m = String(iso).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
+/** dd/mm/aaaa (ou dígitos) → yyyy-mm-dd; null se incompleto/inválido. */
+export function brToIso(br) {
+  const d = digitsOnly(br)
+  if (d.length !== 8) return null
+  const day = d.slice(0, 2)
+  const month = d.slice(2, 4)
+  const year = d.slice(4, 8)
+  const iso = `${year}-${month}-${day}`
+  const dt = new Date(`${iso}T12:00:00`)
+  if (Number.isNaN(dt.getTime())) return null
+  if (dt.getFullYear() !== Number(year) || dt.getMonth() + 1 !== Number(month) || dt.getDate() !== Number(day)) {
+    return null
+  }
+  return iso
+}
+
+/** Máscara digitável dd/mm/aaaa. */
+export function maskDateBr(value) {
+  const d = digitsOnly(value).slice(0, 8)
+  if (d.length <= 2) return d
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
+}
+
 export function firstName(name = '') {
   return name.split(' ')[0] || name
 }

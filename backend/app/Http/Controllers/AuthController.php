@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Caminhao;
+use App\Models\Motorista;
 use App\Models\User;
 use App\Support\Auditoria;
 use Illuminate\Http\JsonResponse;
@@ -15,14 +16,25 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
+            // login unificado (e-mail ou CPF) — preferido.
+            'login' => ['nullable', 'string', 'max:255'],
+            // Compat: clientes antigos ainda enviam e-mail.
+            'email' => ['nullable', 'string', 'max:255'],
+            'cpf' => ['nullable', 'string', 'max:20'],
+            'password' => ['required', 'string'],
         ]);
 
-        $usuario = User::where('email', $dados['email'])->first();
+        $usuario = $this->resolverUsuarioLogin($dados);
 
         if (! $usuario || ! $usuario->is_active || ! Hash::check($dados['password'], $usuario->password)) {
-            return response()->json(['message' => 'E-mail ou senha inválidos.'], 401);
+            return response()->json(['message' => 'Credenciais inválidas.'], 401);
+        }
+
+        // Motorista autentica por CPF; admin/supervisor por e-mail.
+        if ($usuario->isMotorista() && ! $this->loginFoiCpf($dados)) {
+            return response()->json([
+                'message' => 'Motorista: entre com o CPF cadastrado e a senha.',
+            ], 401);
         }
 
         $usuario->tokens()->delete();
@@ -92,6 +104,51 @@ class AuthController extends Controller
         Auditoria::registrar('perfil.senha', $usuario);
 
         return response()->json(['message' => 'Senha atualizada.']);
+    }
+
+    private function resolverUsuarioLogin(array $dados): ?User
+    {
+        $bruto = trim((string) ($dados['login'] ?? $dados['cpf'] ?? $dados['email'] ?? ''));
+        if ($bruto === '') {
+            return null;
+        }
+
+        $digitos = preg_replace('/\D+/', '', $bruto) ?: '';
+        if (strlen($digitos) === 11) {
+            $cpfMascarado = self::formatarCpf($digitos);
+
+            $motorista = Motorista::query()
+                ->where(function ($q) use ($cpfMascarado, $digitos) {
+                    $q->where('cpf', $cpfMascarado)->orWhere('cpf', $digitos);
+                })
+                ->first();
+
+            if (! $motorista) {
+                return null;
+            }
+
+            return User::query()
+                ->where('motorista_id', $motorista->id)
+                ->where('role', User::MOTORISTA)
+                ->first();
+        }
+
+        return User::where('email', strtolower($bruto))->first();
+    }
+
+    private function loginFoiCpf(array $dados): bool
+    {
+        $bruto = trim((string) ($dados['login'] ?? $dados['cpf'] ?? ''));
+        $digitos = preg_replace('/\D+/', '', $bruto) ?: '';
+
+        return strlen($digitos) === 11;
+    }
+
+    public static function formatarCpf(string $digitos): string
+    {
+        $d = preg_replace('/\D+/', '', $digitos) ?: '';
+
+        return substr($d, 0, 3).'.'.substr($d, 3, 3).'.'.substr($d, 6, 3).'-'.substr($d, 9, 2);
     }
 
     private function perfilCompleto(User $usuario): array

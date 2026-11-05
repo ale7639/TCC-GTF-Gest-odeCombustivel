@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
 import Confirm from '../components/Confirm'
+import DateField from '../components/DateField'
 import { useAuth } from '../context/AuthContext'
 import { apiMessage, dateBr, km, money, oleoBadge, oleoLabel, todayLocal } from '../utils/format'
 
@@ -230,15 +231,19 @@ export default function Maintenance() {
               <option value="fechado">Fechado</option>
             </select>
           </div>
-          <div className="field">
-            <label>Data prevista</label>
-            <input type="date" value={form.data_prevista} onChange={(e) => setForm({ ...form, data_prevista: e.target.value })} required />
-          </div>
+          <DateField
+            label="Data prevista"
+            value={form.data_prevista}
+            onChange={(data_prevista) => setForm({ ...form, data_prevista })}
+            required
+          />
           {form.status === 'fechado' && (
-            <div className="field">
-              <label>Data em que foi feita</label>
-              <input type="date" value={form.data_realizada} onChange={(e) => setForm({ ...form, data_realizada: e.target.value })} required />
-            </div>
+            <DateField
+              label="Data em que foi feita"
+              value={form.data_realizada}
+              onChange={(data_realizada) => setForm({ ...form, data_realizada })}
+              required
+            />
           )}
           <div className="field">
             <label>Tipo</label>
@@ -301,10 +306,11 @@ export default function Maintenance() {
                 <label>Intervalo até a próxima (km)</label>
                 <input type="number" min="1000" value={form.oleo_intervalo_km} onChange={(e) => setForm({ ...form, oleo_intervalo_km: e.target.value })} />
               </div>
-              <div className="field">
-                <label>Próxima data sugerida (opcional)</label>
-                <input type="date" value={form.oleo_proxima_data} onChange={(e) => setForm({ ...form, oleo_proxima_data: e.target.value })} />
-              </div>
+              <DateField
+                label="Próxima data sugerida (opcional)"
+                value={form.oleo_proxima_data}
+                onChange={(oleo_proxima_data) => setForm({ ...form, oleo_proxima_data })}
+              />
             </div>
           )}
 
@@ -387,10 +393,12 @@ export default function Maintenance() {
           >
             <h2>Fechar ordem de serviço</h2>
             <p className="muted">{concluir.tipo}</p>
-            <div className="field">
-              <label>Data em que foi feita</label>
-              <input type="date" required value={concluir.data_realizada} onChange={(e) => setConcluir({ ...concluir, data_realizada: e.target.value })} />
-            </div>
+            <DateField
+              label="Data em que foi feita"
+              value={concluir.data_realizada}
+              onChange={(data_realizada) => setConcluir({ ...concluir, data_realizada })}
+              required
+            />
             <div className="field">
               <label>KM</label>
               <input type="number" required value={concluir.km} onChange={(e) => setConcluir({ ...concluir, km: e.target.value })} />

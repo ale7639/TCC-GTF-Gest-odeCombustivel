@@ -61,11 +61,36 @@ class GfcRegrasTest extends TestCase
         $user = User::first();
 
         $this->postJson('/api/login', [
-            'email' => $user->email,
+            'login' => $user->email,
             'password' => 'Senha123',
         ])->assertOk()
             ->assertJsonPath('user.role', 'administrador')
             ->assertJsonStructure(['token', 'usuario' => ['nome', 'email']]);
+    }
+
+    public function test_motorista_entra_com_cpf(): void
+    {
+        $frota = $this->frota();
+        $this->usuario('motorista', $frota['motorista']->id);
+
+        $this->postJson('/api/login', [
+            'login' => '111.111.111-11',
+            'password' => 'Senha123',
+        ])->assertOk()
+            ->assertJsonPath('user.role', 'motorista');
+
+        $this->postJson('/api/login', [
+            'login' => '11111111111',
+            'password' => 'Senha123',
+        ])->assertOk()
+            ->assertJsonPath('user.role', 'motorista');
+
+        // E-mail de motorista não autentica — Diego pediu CPF.
+        $email = User::where('role', 'motorista')->value('email');
+        $this->postJson('/api/login', [
+            'login' => $email,
+            'password' => 'Senha123',
+        ])->assertStatus(401);
     }
 
     public function test_motorista_nao_ve_relatorios(): void

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
-import { apiMessage, dateBr, money } from '../utils/format'
+import DateField from '../components/DateField'
+import { apiMessage, dateBr, money, todayLocal } from '../utils/format'
 
 const vazio = {
-  caminhao_id: '', motorista_id: '', data: new Date().toISOString().slice(0, 10),
+  caminhao_id: '', motorista_id: '', data: todayLocal(),
   valor: '', descricao: '', prazo: '', status: 'pendente',
 }
 
@@ -72,6 +73,7 @@ export default function Fines() {
           </p>
           <button className="btn btn-soft" style={{ width: 'auto', marginTop: 8 }} onClick={() => setForm({
             ...m, caminhao_id: m.caminhao_id || m.caminhao?.id, motorista_id: m.motorista_id || m.motorista?.id || '',
+            data: m.data?.slice?.(0, 10) || m.data, prazo: m.prazo?.slice?.(0, 10) || m.prazo || '',
           })}>
             Editar
           </button>
@@ -94,10 +96,19 @@ export default function Fines() {
               {motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </div>
-          <div className="field"><label>Data</label><input type="date" value={form.data?.slice?.(0, 10) || form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required /></div>
+          <DateField
+            label="Data"
+            value={form.data?.slice?.(0, 10) || form.data || ''}
+            onChange={(data) => setForm({ ...form, data })}
+            required
+          />
           <div className="field"><label>Valor</label><input type="number" step="0.01" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} required /></div>
           <div className="field"><label>Descrição</label><input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} required /></div>
-          <div className="field"><label>Prazo</label><input type="date" value={form.prazo?.slice?.(0, 10) || form.prazo || ''} onChange={(e) => setForm({ ...form, prazo: e.target.value })} /></div>
+          <DateField
+            label="Prazo"
+            value={form.prazo?.slice?.(0, 10) || form.prazo || ''}
+            onChange={(prazo) => setForm({ ...form, prazo })}
+          />
           <div className="field">
             <label>Status</label>
             <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
