@@ -8,6 +8,7 @@ use App\Models\ConciliacaoTanque;
 use App\Models\Motorista;
 use App\Models\Multa;
 use App\Models\Pneu;
+use App\Models\SolicitacaoSenha;
 use App\Models\Tanque;
 use App\Models\User;
 
@@ -25,7 +26,24 @@ class Alertas
             return self::motorista($usuario->motorista_id);
         }
 
-        return self::gestao($inicio);
+        $alertas = self::gestao($inicio);
+
+        // Pedidos de troca de senha: só administrador.
+        if ($usuario->isAdmin()) {
+            foreach (SolicitacaoSenha::pendentes()->orderByDesc('updated_at')->limit(20)->get() as $s) {
+                $alertas[] = self::item(
+                    'senha:'.$s->id,
+                    'senha',
+                    'vencido',
+                    'Pedido de nova senha',
+                    $s->nome.' · CPF '.$s->cpf.' · '.$s->updated_at?->timezone(config('app.timezone'))->format('d/m/Y H:i'),
+                    '/app/motoristas'
+                );
+            }
+            $alertas = self::ordenar($alertas);
+        }
+
+        return $alertas;
     }
 
     private static function gestao(string $inicio): array

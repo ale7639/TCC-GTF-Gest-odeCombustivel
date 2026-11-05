@@ -40,4 +40,22 @@ class Motorista extends Model
     {
         return WhatsApp::link($this->telefone);
     }
+
+    /** Senha inicial do motorista = CPF só com dígitos (ex.: 11111111111). */
+    public function senhaPadrao(): string
+    {
+        return self::cpfDigitos($this->cpf);
+    }
+
+    public static function cpfDigitos(?string $cpf): string
+    {
+        return preg_replace('/\D+/', '', (string) $cpf) ?: '';
+    }
+
+    public static function formatarCpf(string $digitos): string
+    {
+        $d = self::cpfDigitos($digitos);
+
+        return substr($d, 0, 3).'.'.substr($d, 3, 3).'.'.substr($d, 6, 3).'-'.substr($d, 9, 2);
+    }
 }

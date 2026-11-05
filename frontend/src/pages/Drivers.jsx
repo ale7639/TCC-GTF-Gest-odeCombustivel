@@ -16,7 +16,9 @@ export default function Drivers() {
   const [lista, setLista] = useState([])
   const [caminhoes, setCaminhoes] = useState([])
   const [form, setForm] = useState(null)
+  const [senhaForm, setSenhaForm] = useState(null)
   const [error, setError] = useState('')
+  const [ok, setOk] = useState('')
   const [delId, setDelId] = useState(null)
 
   async function carregar() {
@@ -30,6 +32,7 @@ export default function Drivers() {
   async function salvar(event) {
     event.preventDefault()
     setError('')
+    setOk('')
     const payload = {
       ...form,
       ativo: Boolean(form.ativo),
@@ -42,7 +45,29 @@ export default function Drivers() {
       if (form.id) await api.put(`/motoristas/${form.id}`, payload)
       else await api.post('/motoristas', payload)
       setForm(null)
+      setOk(form.id ? 'Motorista atualizado.' : 'Motorista criado. Senha inicial = CPF (só números).')
       await carregar()
+    } catch (err) {
+      setError(apiMessage(err))
+    }
+  }
+
+  async function salvarSenha(event) {
+    event.preventDefault()
+    setError('')
+    setOk('')
+    if (senhaForm.password !== senhaForm.password_confirmation) {
+      setError('A confirmação da senha não confere.')
+      return
+    }
+    try {
+      await api.put(`/motoristas/${senhaForm.id}/senha`, {
+        password: senhaForm.password,
+        password_confirmation: senhaForm.password_confirmation,
+      })
+      setOk(`Senha de ${senhaForm.nome} atualizada.`)
+      setSenhaForm(null)
+      window.dispatchEvent(new Event('gfc:notificacoes'))
     } catch (err) {
       setError(apiMessage(err))
     }
@@ -69,6 +94,7 @@ export default function Drivers() {
         {isAdmin && <button className="btn btn-primary" style={{ width: 'auto' }} onClick={() => setForm({ ...vazio })}>Novo</button>}
       </div>
       {error && <div className="banner banner-danger">{error}</div>}
+      {ok && <div className="banner banner-ok">{ok}</div>}
       {lista.length === 0 && !form && <EmptyState icon="👤" title="Nenhum motorista" />}
       <div className="list">
         {lista.map((m) => (
@@ -77,7 +103,7 @@ export default function Drivers() {
               <div>
                 <strong>{m.nome}</strong>
                 <p className="muted" style={{ margin: 0 }}>
-                  {m.caminhao?.placa || 'Sem caminhão'} · {m.telefone || 'sem telefone'}
+                  CPF {m.cpf} · {m.caminhao?.placa || 'Sem caminhão'} · {m.telefone || 'sem telefone'}
                   {m.cnh_validade ? ` · CNH até ${String(m.cnh_validade).slice(0, 10).split('-').reverse().join('/')}` : ''}
                 </p>
               </div>
@@ -86,6 +112,15 @@ export default function Drivers() {
             <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
               {m.whatsapp_url && <a className="btn btn-wa" href={m.whatsapp_url} target="_blank" rel="noreferrer">WhatsApp</a>}
               {isAdmin && <button className="btn btn-soft" style={{ width: 'auto' }} onClick={() => setForm({ ...m, caminhao_id: m.caminhao?.id || '' })}>Editar</button>}
+              {isAdmin && (
+                <button
+                  className="btn btn-soft"
+                  style={{ width: 'auto' }}
+                  onClick={() => setSenhaForm({ id: m.id, nome: m.nome, password: '', password_confirmation: '' })}
+                >
+                  Alterar senha
+                </button>
+              )}
               {isAdmin && <button className="btn btn-ghost" onClick={() => setDelId(m.id)}>Excluir</button>}
             </div>
           </div>
@@ -94,6 +129,11 @@ export default function Drivers() {
       {form && (
         <form className="card stack" onSubmit={salvar}>
           <h2>{form.id ? 'Editar' : 'Novo motorista'}</h2>
+          {!form.id && (
+            <p className="muted" style={{ margin: 0 }}>
+              A senha de acesso inicial será o CPF (apenas dígitos).
+            </p>
+          )}
           <div className="field"><label>Nome</label><input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required /></div>
           <div className="field"><label>CPF</label><input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} required /></div>
           <div className="field"><label>CNH</label><input value={form.cnh} onChange={(e) => setForm({ ...form, cnh: e.target.value })} required /></div>
@@ -115,6 +155,38 @@ export default function Drivers() {
           <label className="row"><input type="checkbox" checked={!!form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Ativo</label>
           <button className="btn btn-primary">Salvar</button>
           <button type="button" className="btn btn-soft" onClick={() => setForm(null)}>Cancelar</button>
+        </form>
+      )}
+      {senhaForm && (
+        <form className="card stack" onSubmit={salvarSenha}>
+          <h2>Alterar senha</h2>
+          <p className="muted" style={{ margin: 0 }}>
+            {senhaForm.nome}. A senha atual não é exibida — defina uma nova e confirme.
+          </p>
+          <div className="field">
+            <label>Nova senha</label>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={senhaForm.password}
+              onChange={(e) => setSenhaForm({ ...senhaForm, password: e.target.value })}
+              minLength={8}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Confirmar senha</label>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={senhaForm.password_confirmation}
+              onChange={(e) => setSenhaForm({ ...senhaForm, password_confirmation: e.target.value })}
+              minLength={8}
+              required
+            />
+          </div>
+          <button className="btn btn-primary">Salvar nova senha</button>
+          <button type="button" className="btn btn-soft" onClick={() => setSenhaForm(null)}>Cancelar</button>
         </form>
       )}
       {delId && (

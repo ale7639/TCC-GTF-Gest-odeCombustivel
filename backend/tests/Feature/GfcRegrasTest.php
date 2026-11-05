@@ -68,29 +68,74 @@ class GfcRegrasTest extends TestCase
             ->assertJsonStructure(['token', 'usuario' => ['nome', 'email']]);
     }
 
-    public function test_motorista_entra_com_cpf(): void
+    public function test_motorista_entra_com_cpf_e_senha_igual_ao_cpf(): void
     {
         $frota = $this->frota();
-        $this->usuario('motorista', $frota['motorista']->id);
+        $user = $this->usuario('motorista', $frota['motorista']->id);
+        $user->password = '11111111111';
+        $user->save();
 
         $this->postJson('/api/login', [
             'login' => '111.111.111-11',
-            'password' => 'Senha123',
+            'password' => '11111111111',
         ])->assertOk()
             ->assertJsonPath('user.role', 'motorista');
 
         $this->postJson('/api/login', [
             'login' => '11111111111',
-            'password' => 'Senha123',
+            'password' => '11111111111',
         ])->assertOk()
             ->assertJsonPath('user.role', 'motorista');
 
         // E-mail de motorista não autentica — Diego pediu CPF.
-        $email = User::where('role', 'motorista')->value('email');
         $this->postJson('/api/login', [
-            'login' => $email,
-            'password' => 'Senha123',
+            'login' => $user->email,
+            'password' => '11111111111',
         ])->assertStatus(401);
+    }
+
+    public function test_esqueci_senha_notifica_admin_e_admin_redefine(): void
+    {
+        $frota = $this->frota();
+        $motoristaUser = $this->usuario('motorista', $frota['motorista']->id);
+        $motoristaUser->password = '11111111111';
+        $motoristaUser->save();
+        $admin = $this->usuario('administrador');
+
+        $this->postJson('/api/senha/esqueci', ['cpf' => '111.111.111-11'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Se o CPF estiver cadastrado, o administrador receberá o pedido.');
+
+        // CPF inexistente: mesma mensagem (não vaza).
+        $this->postJson('/api/senha/esqueci', ['cpf' => '999.999.999-99'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Se o CPF estiver cadastrado, o administrador receberá o pedido.');
+
+        $notif = $this->actingAs($admin, 'sanctum')->getJson('/api/notificacoes')->assertOk()->json();
+        $pedido = collect($notif['itens'])->first(fn ($i) => str_starts_with($i['chave'], 'senha:'));
+        $this->assertNotNull($pedido);
+        $this->assertStringContainsString($frota['motorista']->nome, $pedido['texto']);
+        $this->assertStringContainsString('111.111.111-11', $pedido['texto']);
+
+        $this->actingAs($admin, 'sanctum')->putJson('/api/motoristas/'.$frota['motorista']->id.'/senha', [
+            'password' => 'NovaSenha99',
+            'password_confirmation' => 'NovaSenha99',
+        ])->assertOk();
+
+        // Resposta não traz a senha.
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/motoristas/'.$frota['motorista']->id)
+            ->assertOk()
+            ->assertJsonMissingPath('password');
+
+        $this->postJson('/api/login', [
+            'login' => '111.111.111-11',
+            'password' => 'NovaSenha99',
+        ])->assertOk();
+
+        $notif2 = $this->actingAs($admin, 'sanctum')->getJson('/api/notificacoes')->assertOk()->json();
+        $ainda = collect($notif2['itens'])->first(fn ($i) => str_starts_with($i['chave'], 'senha:'));
+        $this->assertNull($ainda);
     }
 
     public function test_motorista_nao_ve_relatorios(): void

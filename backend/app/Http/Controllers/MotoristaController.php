@@ -7,6 +7,8 @@ use App\Models\Caminhao;
 use App\Models\Lavagem;
 use App\Models\Manutencao;
 use App\Models\Motorista;
+use App\Models\SolicitacaoSenha;
+use App\Models\User;
 use App\Support\Auditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +34,7 @@ class MotoristaController extends Controller
         $motorista = DB::transaction(function () use ($dados) {
             $motorista = Motorista::create(Arr::except($dados, 'caminhao_id'));
             $this->vincular($motorista, $dados['caminhao_id'] ?? null);
+            $this->garantirUsuarioComSenhaCpf($motorista, forcarSenha: true);
 
             return $motorista;
         });
@@ -56,11 +59,55 @@ class MotoristaController extends Controller
             if (array_key_exists('caminhao_id', $dados)) {
                 $this->vincular($motorista, $dados['caminhao_id']);
             }
+
+            // Mantém conta de acesso; não redefine senha no edit.
+            $this->garantirUsuarioComSenhaCpf($motorista, forcarSenha: false);
         });
 
         Auditoria::registrar('motorista.editar', $motorista);
 
         return response()->json($motorista->load('caminhao:id,placa,modelo,motorista_id'));
+    }
+
+    /**
+     * ADM redefine a senha do motorista sem ver a senha atual.
+     * Body: password + password_confirmation.
+     */
+    public function alterarSenha(Request $request, Motorista $motorista): JsonResponse
+    {
+        $dados = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ], [
+            'password.min' => 'A nova senha precisa ter pelo menos 8 caracteres.',
+            'password.confirmed' => 'A confirmação da senha não confere.',
+        ]);
+
+        $usuario = User::where('motorista_id', $motorista->id)
+            ->where('role', User::MOTORISTA)
+            ->first();
+
+        if (! $usuario) {
+            $usuario = $this->garantirUsuarioComSenhaCpf($motorista, forcarSenha: false);
+        }
+
+        $usuario->password = $dados['password'];
+        $usuario->is_active = true;
+        $usuario->save();
+
+        SolicitacaoSenha::pendentes()
+            ->where('motorista_id', $motorista->id)
+            ->get()
+            ->each(fn (SolicitacaoSenha $s) => $s->marcarAtendida($request->user()));
+
+        Auditoria::registrar('motorista.senha', $motorista, [
+            'user_id' => $usuario->id,
+            'por' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Senha do motorista atualizada.',
+            'motorista_id' => $motorista->id,
+        ]);
     }
 
     public function destroy(Motorista $motorista): JsonResponse
@@ -71,6 +118,7 @@ class MotoristaController extends Controller
 
         if ($temHistorico) {
             $motorista->update(['ativo' => false]);
+            User::where('motorista_id', $motorista->id)->update(['is_active' => false]);
             Auditoria::registrar('motorista.desativar', $motorista);
 
             return response()->json([
@@ -79,6 +127,7 @@ class MotoristaController extends Controller
             ]);
         }
 
+        User::where('motorista_id', $motorista->id)->delete();
         $motorista->delete();
         Auditoria::registrar('motorista.excluir', $motorista);
 
@@ -94,15 +143,43 @@ class MotoristaController extends Controller
         }
     }
 
+    /** Garante User ligado ao motorista; senha inicial = CPF (dígitos) quando forçar/criar. */
+    private function garantirUsuarioComSenhaCpf(Motorista $motorista, bool $forcarSenha): User
+    {
+        $digitos = $motorista->senhaPadrao();
+        $email = 'm'.$digitos.'@gfc.local';
+
+        $usuario = User::where('motorista_id', $motorista->id)
+            ->where('role', User::MOTORISTA)
+            ->first();
+
+        if (! $usuario) {
+            $usuario = User::where('email', $email)->first() ?: new User(['email' => $email]);
+            $usuario->role = User::MOTORISTA;
+            $usuario->motorista_id = $motorista->id;
+            $forcarSenha = true;
+        }
+
+        $usuario->name = $motorista->nome;
+        $usuario->is_active = (bool) $motorista->ativo;
+        $usuario->motorista_id = $motorista->id;
+        $usuario->role = User::MOTORISTA;
+
+        if ($forcarSenha && $digitos !== '') {
+            $usuario->password = $digitos;
+        }
+
+        $usuario->save();
+
+        return $usuario;
+    }
+
     private function validar(Request $request, ?Motorista $motorista = null): array
     {
         if ($request->filled('cpf')) {
-            $digitos = preg_replace('/\D/', '', $request->input('cpf'));
+            $digitos = Motorista::cpfDigitos($request->input('cpf'));
             if (strlen($digitos) === 11) {
-                $request->merge([
-                    'cpf' => substr($digitos, 0, 3).'.'.substr($digitos, 3, 3).'.'
-                        .substr($digitos, 6, 3).'-'.substr($digitos, 9, 2),
-                ]);
+                $request->merge(['cpf' => Motorista::formatarCpf($digitos)]);
             }
         }
 

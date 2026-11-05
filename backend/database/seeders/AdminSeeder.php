@@ -21,17 +21,27 @@ class AdminSeeder extends Seeder
         );
 
         $joaoFicha = Motorista::where('cpf', '111.111.111-11')->first();
+        $senhaCpf = $joaoFicha?->senhaPadrao() ?: '11111111111';
 
-        User::firstOrCreate(
+        $joao = User::firstOrCreate(
             ['email' => 'joao@gfc.com.br'],
             [
                 'name' => 'João Santos',
-                'password' => 'Senha123',
+                'password' => $senhaCpf,
                 'role' => User::MOTORISTA,
                 'is_active' => true,
                 'motorista_id' => $joaoFicha?->id,
             ]
         );
+
+        // Garante senha = CPF (dígitos), mesmo se o usuário já existia com Senha123.
+        $joao->password = $senhaCpf;
+        $joao->role = User::MOTORISTA;
+        $joao->is_active = true;
+        if ($joaoFicha) {
+            $joao->motorista_id = $joaoFicha->id;
+        }
+        $joao->save();
 
         User::firstOrCreate(
             ['email' => 'admin@frota.com'],

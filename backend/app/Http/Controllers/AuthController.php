@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Caminhao;
 use App\Models\Motorista;
+use App\Models\SolicitacaoSenha;
 use App\Models\User;
 use App\Support\Auditoria;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,58 @@ class AuthController extends Controller
                 'role' => $usuario->role,
             ],
         ]);
+    }
+
+    /**
+     * Pedido de troca de senha (motorista informa CPF).
+     * Sempre responde genericamente; se existir, notifica o administrador no sino.
+     */
+    public function esqueciSenha(Request $request): JsonResponse
+    {
+        $dados = $request->validate([
+            'cpf' => ['required', 'string', 'max:20'],
+        ]);
+
+        $mensagem = 'Se o CPF estiver cadastrado, o administrador receberá o pedido.';
+        $digitos = Motorista::cpfDigitos($dados['cpf']);
+
+        if (strlen($digitos) === 11) {
+            $cpf = Motorista::formatarCpf($digitos);
+            $motorista = Motorista::query()
+                ->where(function ($q) use ($cpf, $digitos) {
+                    $q->where('cpf', $cpf)->orWhere('cpf', $digitos);
+                })
+                ->where('ativo', true)
+                ->first();
+
+            $temAcesso = $motorista && User::where('motorista_id', $motorista->id)
+                ->where('role', User::MOTORISTA)
+                ->where('is_active', true)
+                ->exists();
+
+            if ($temAcesso) {
+                $pendente = SolicitacaoSenha::pendentes()
+                    ->where('motorista_id', $motorista->id)
+                    ->first();
+
+                if ($pendente) {
+                    $pendente->touch();
+                } else {
+                    SolicitacaoSenha::create([
+                        'motorista_id' => $motorista->id,
+                        'cpf' => $motorista->cpf,
+                        'nome' => $motorista->nome,
+                        'status' => SolicitacaoSenha::PENDENTE,
+                    ]);
+                }
+
+                Auditoria::registrar('auth.esqueci_senha', $motorista, [
+                    'cpf' => $motorista->cpf,
+                ]);
+            }
+        }
+
+        return response()->json(['message' => $mensagem]);
     }
 
     public function logout(Request $request): JsonResponse
@@ -113,9 +166,9 @@ class AuthController extends Controller
             return null;
         }
 
-        $digitos = preg_replace('/\D+/', '', $bruto) ?: '';
+        $digitos = Motorista::cpfDigitos($bruto);
         if (strlen($digitos) === 11) {
-            $cpfMascarado = self::formatarCpf($digitos);
+            $cpfMascarado = Motorista::formatarCpf($digitos);
 
             $motorista = Motorista::query()
                 ->where(function ($q) use ($cpfMascarado, $digitos) {
@@ -139,16 +192,8 @@ class AuthController extends Controller
     private function loginFoiCpf(array $dados): bool
     {
         $bruto = trim((string) ($dados['login'] ?? $dados['cpf'] ?? ''));
-        $digitos = preg_replace('/\D+/', '', $bruto) ?: '';
 
-        return strlen($digitos) === 11;
-    }
-
-    public static function formatarCpf(string $digitos): string
-    {
-        $d = preg_replace('/\D+/', '', $digitos) ?: '';
-
-        return substr($d, 0, 3).'.'.substr($d, 3, 3).'.'.substr($d, 6, 3).'-'.substr($d, 9, 2);
+        return strlen(Motorista::cpfDigitos($bruto)) === 11;
     }
 
     private function perfilCompleto(User $usuario): array
