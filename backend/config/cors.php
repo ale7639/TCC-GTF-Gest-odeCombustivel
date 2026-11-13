@@ -7,6 +7,9 @@ return [
         env('FRONTEND_URL', 'http://localhost:5173'),
         'http://127.0.0.1:5173',
         'http://localhost:5173',
+        // Expo web (mobile app on this PC)
+        'http://127.0.0.1:8082',
+        'http://localhost:8082',
     ],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
