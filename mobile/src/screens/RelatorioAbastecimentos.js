@@ -11,6 +11,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { cores } from '../ui/tema';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -177,22 +178,22 @@ export default function RelatorioAbastecimentos() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  tela: { flex: 1, backgroundColor: cores.fundo },
   conteudo: { padding: 16, paddingTop: 56, paddingBottom: 40 },
   periodos: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   periodo: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  periodoAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  periodoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { color: '#6b7280', marginBottom: 8 },
+  periodoAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  periodoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { color: cores.textoSecundario, marginBottom: 8 },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: {
     flex: 1,
@@ -201,16 +202,16 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
   },
-  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  cartaoTitulo: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
-  secao: { fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 8, color: '#111827' },
+  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
+  cartaoTitulo: { fontSize: 12, color: cores.textoSecundario, marginTop: 4, textAlign: 'center' },
+  secao: { fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 8, color: cores.texto },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  nomeItem: { fontSize: 15, fontWeight: '600', color: '#111827', flexShrink: 1, marginRight: 8 },
-  destaque: { fontSize: 15, fontWeight: 'bold', color: '#2563eb' },
-  barraFundo: { height: 8, backgroundColor: '#e5e7eb', borderRadius: 4, overflow: 'hidden' },
-  barra: { height: 8, backgroundColor: '#2563eb' },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
-  nota: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
-  rodape: { fontSize: 12, color: '#6b7280', marginTop: 16, lineHeight: 18 },
+  nomeItem: { fontSize: 15, fontWeight: '600', color: cores.texto, flexShrink: 1, marginRight: 8 },
+  destaque: { fontSize: 15, fontWeight: 'bold', color: cores.primaria },
+  barraFundo: { height: 8, backgroundColor: cores.bordaClara, borderRadius: 4, overflow: 'hidden' },
+  barra: { height: 8, backgroundColor: cores.primaria },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
+  nota: { fontSize: 12, color: cores.textoClaro, marginTop: 4 },
+  rodape: { fontSize: 12, color: cores.textoSecundario, marginTop: 16, lineHeight: 18 },
 });

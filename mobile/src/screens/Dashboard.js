@@ -11,6 +11,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { cores } from '../ui/tema';
 
 // Funções de formatação: 15000 -> "15.000" | 6350 -> "R$ 6.350,00" | "2026-10-16" -> "16/10/2026"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -50,7 +51,7 @@ function NivelTanque({ tanque, destaque }) {
             destaque && { height: 16 },
             {
               width: `${Math.min(tanque.percentual, 100)}%`,
-              backgroundColor: tanque.alerta ? '#dc2626' : '#16a34a',
+              backgroundColor: tanque.alerta ? cores.perigo : cores.primaria,
             },
           ]}
         />
@@ -135,6 +136,14 @@ export default function Dashboard() {
             </Pressable>
           )}
 
+          {/* Atalho para a tarefa mais comum do sistema */}
+          <Pressable
+            style={styles.botaoAbastecer}
+            onPress={() => navegacao.navigate('Abastecimentos', { novo: Date.now() })}
+          >
+            <Text style={styles.botaoAbastecerTexto}>+  Abastecer caminhão</Text>
+          </Pressable>
+
           <View style={styles.linha}>
             <Cartao titulo={`Litros abastecidos (${dados.dias} dias)`} valor={numero(dados.litros_abastecidos)} />
             <Cartao titulo={`Litros comprados (${dados.dias} dias)`} valor={numero(dados.litros_comprados)} />
@@ -198,7 +207,7 @@ export default function Dashboard() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  tela: { flex: 1, backgroundColor: cores.fundo },
   conteudo: { padding: 16, paddingTop: 56, paddingBottom: 40 },
   cabecalho: {
     flexDirection: 'row',
@@ -206,24 +215,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  sair: { fontSize: 16, fontWeight: '600', color: '#2563eb' },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  sair: { fontSize: 16, fontWeight: '600', color: cores.primaria },
   periodos: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   periodo: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  periodoAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  periodoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  pendencias: { backgroundColor: '#fef3c7', borderRadius: 12, padding: 12, marginBottom: 8 },
-  pendenciasTexto: { color: '#92400e', fontWeight: '600', fontSize: 14 },
-  vazio: { color: '#6b7280', marginBottom: 8 },
+  periodoAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  periodoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  pendencias: { backgroundColor: cores.primariaClara, borderRadius: 12, padding: 12, marginBottom: 8 },
+  pendenciasTexto: { color: cores.primariaEscura, fontWeight: '600', fontSize: 14 },
+  vazio: { color: cores.textoSecundario, marginBottom: 8 },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: {
     flex: 1,
@@ -232,17 +241,25 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
   },
-  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  cartaoTitulo: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
-  secao: { fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 8, color: '#111827' },
+  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
+  cartaoTitulo: { fontSize: 12, color: cores.textoSecundario, marginTop: 4, textAlign: 'center' },
+  botaoAbastecer: {
+    backgroundColor: cores.primaria,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  botaoAbastecerTexto: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  secao: { fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 8, color: cores.texto },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
-  caixaDestaque: { borderWidth: 2, borderColor: '#2563eb', padding: 16 },
+  caixaDestaque: { borderWidth: 2, borderColor: cores.primaria, padding: 16 },
   topoTanque: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  nomeItem: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  nomeDestaque: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  alerta: { color: '#dc2626', fontWeight: 'bold', fontSize: 12 },
-  barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
+  nomeItem: { fontSize: 15, fontWeight: '600', color: cores.texto },
+  nomeDestaque: { fontSize: 18, fontWeight: 'bold', color: cores.texto },
+  alerta: { color: cores.perigo, fontWeight: 'bold', fontSize: 12 },
+  barraFundo: { height: 10, backgroundColor: cores.bordaClara, borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
-  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
+  custo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
 });

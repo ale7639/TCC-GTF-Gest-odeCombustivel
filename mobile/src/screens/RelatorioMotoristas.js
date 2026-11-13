@@ -11,6 +11,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { cores } from '../ui/tema';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -41,12 +42,20 @@ function Cartao({ titulo, valor }) {
   );
 }
 
-// Uma linha "rótulo ........ valor" do cartão do motorista.
-function Linha({ rotulo, valor }) {
+// Iniciais do nome para o "avatar": "João Pedro Almeida" -> "JA".
+const iniciais = (nome) => {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+};
+
+// Um número pequeno com o rótulo embaixo (a grade de 3 colunas do cartão).
+function Indicador({ valor, rotulo }) {
   return (
-    <View style={styles.linhaDado}>
-      <Text style={styles.rotuloDado}>{rotulo}</Text>
-      <Text style={styles.valorDado}>{valor}</Text>
+    <View style={styles.indicador}>
+      <Text style={styles.indicadorValor} numberOfLines={1}>
+        {valor}
+      </Text>
+      <Text style={styles.indicadorRotulo}>{rotulo}</Text>
     </View>
   );
 }
@@ -117,23 +126,36 @@ export default function RelatorioMotoristas() {
 
           {dados.motoristas.map((m) => (
             <View key={m.motorista_id} style={styles.caixa}>
-              <Text style={styles.nome}>{m.nome}</Text>
-              <Text style={styles.placas}>
-                {m.placas.length > 0 ? m.placas.join(' · ') : 'Sem abastecimentos no período'}
-              </Text>
+              {/* Topo: iniciais + nome e placas + consumo em destaque */}
+              <View style={styles.topoMotorista}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarTexto}>{iniciais(m.nome)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.nome} numberOfLines={1}>
+                    {m.nome}
+                  </Text>
+                  <Text style={styles.placas} numberOfLines={1}>
+                    {m.placas.length > 0 ? m.placas.join(' · ') : 'Sem abastecimentos no período'}
+                  </Text>
+                </View>
+                <View style={styles.consumo}>
+                  <Text style={styles.consumoValor}>
+                    {m.consumo_km_l != null ? consumoFmt(m.consumo_km_l) : '—'}
+                  </Text>
+                  <Text style={styles.consumoRotulo}>km/L</Text>
+                </View>
+              </View>
 
-              <Linha rotulo="Abastecimentos" valor={m.abastecimentos} />
-              <Linha rotulo="Litros abastecidos" valor={`${litrosFmt(m.litros)} L`} />
-              <Linha rotulo="Km rodados" valor={`${numero(m.km_rodados)} km`} />
-              <Linha
-                rotulo="Consumo médio"
-                valor={m.consumo_km_l != null ? `${consumoFmt(m.consumo_km_l)} km/L` : '—'}
-              />
-              <Linha rotulo="Lavagens" valor={m.lavagens} />
-              <Linha
-                rotulo="Manutenções"
-                valor={m.manutencoes > 0 ? `${m.manutencoes} · ${moeda(m.gasto_manutencao)}` : '0'}
-              />
+              {/* Grade com os números do período */}
+              <View style={styles.grade}>
+                <Indicador valor={m.abastecimentos} rotulo="Abastecimentos" />
+                <Indicador valor={`${litrosFmt(m.litros)} L`} rotulo="Litros" />
+                <Indicador valor={`${numero(m.km_rodados)} km`} rotulo="Rodados" />
+                <Indicador valor={m.lavagens} rotulo="Lavagens" />
+                <Indicador valor={m.manutencoes} rotulo="Manutenções" />
+                <Indicador valor={m.gasto_manutencao > 0 ? moeda(m.gasto_manutencao) : '—'} rotulo="Gasto manutenção" />
+              </View>
             </View>
           ))}
 
@@ -147,37 +169,52 @@ export default function RelatorioMotoristas() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  tela: { flex: 1, backgroundColor: cores.fundo },
   conteudo: { padding: 16, paddingTop: 56, paddingBottom: 40 },
   periodos: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   periodo: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  periodoAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  periodoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 30 },
+  periodoAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  periodoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 30 },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   cartao: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center' },
-  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  cartaoTitulo: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
+  cartaoValor: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
+  cartaoTitulo: { fontSize: 12, color: cores.textoSecundario, marginTop: 4, textAlign: 'center' },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10 },
-  nome: { fontSize: 17, fontWeight: 'bold', color: '#111827' },
-  placas: { fontSize: 13, color: '#6b7280', marginTop: 2, marginBottom: 8 },
-  linhaDado: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+  topoMotorista: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: cores.primariaClara,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  rotuloDado: { fontSize: 14, color: '#6b7280' },
-  valorDado: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  nota: { fontSize: 12, color: '#6b7280', marginTop: 8 },
+  avatarTexto: { color: cores.primaria, fontWeight: 'bold', fontSize: 15 },
+  nome: { fontSize: 16, fontWeight: 'bold', color: cores.texto },
+  placas: { fontSize: 13, color: cores.textoSecundario, marginTop: 2 },
+  consumo: { alignItems: 'center', backgroundColor: cores.primaria, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10 },
+  consumoValor: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  consumoRotulo: { color: '#fff', fontSize: 11 },
+  grade: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: cores.bordaClara,
+  },
+  indicador: { width: '33.33%', alignItems: 'center', paddingVertical: 8 },
+  indicadorValor: { fontSize: 15, fontWeight: 'bold', color: cores.texto },
+  indicadorRotulo: { fontSize: 11, color: cores.textoSecundario, marginTop: 2, textAlign: 'center' },
+  nota: { fontSize: 12, color: cores.textoSecundario, marginTop: 8 },
 });

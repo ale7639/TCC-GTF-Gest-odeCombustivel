@@ -1,31 +1,55 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMenu } from '../menu/MenuContext';
+import { cores } from '../ui/tema';
 
-// Cabeçalho de todas as telas: botão do menu (três risquinhos) + título + botões opcionais à direita.
-// No computador o menu já fica aberto ao lado, então o botão ☰ não aparece.
+// Barra vermelha do topo de todas as telas.
+// - à esquerda: botão do menu (☰) ou, se "aoVoltar" for passado, a seta de voltar (formulários);
+// - no meio: o título;
+// - à direita: botões opcionais da tela (ex.: "+ Novo").
 // Uso: <Cabecalho titulo="GESTÃO DE FROTA"> <botão /> </Cabecalho>
-export default function Cabecalho({ titulo, children }) {
-  const { abrir, fixo } = useMenu();
+//      <Cabecalho titulo="Novo caminhão" aoVoltar={fechar} />
+// As margens negativas fazem a barra ocupar a largura toda, por cima do espaçamento da tela.
+export default function Cabecalho({ titulo, children, aoVoltar }) {
+  const menu = useMenu(); // fica vazio fora do menu (ex.: área do motorista)
 
   return (
-    <View style={styles.linha}>
-      {!fixo && (
-        <Pressable onPress={abrir} style={styles.menu} accessibilityLabel="Abrir menu" hitSlop={8}>
-          <MaterialCommunityIcons name="menu" size={28} color="#111827" />
-        </Pressable>
-      )}
-      <Text style={[styles.titulo, fixo && { fontSize: 24 }]} numberOfLines={1}>
+    <View style={styles.barra}>
+      <View style={styles.esquerda}>
+        {aoVoltar ? (
+          <Pressable onPress={aoVoltar} accessibilityLabel="Voltar" hitSlop={8}>
+            <MaterialCommunityIcons name="arrow-left" size={26} color="#fff" />
+          </Pressable>
+        ) : menu?.abrir ? (
+          <Pressable onPress={menu.abrir} accessibilityLabel="Abrir menu" hitSlop={8}>
+            <MaterialCommunityIcons name="menu" size={28} color="#fff" />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <Text style={styles.titulo} numberOfLines={1}>
         {titulo}
       </Text>
+
       <View style={styles.direita}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  linha: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  menu: { marginRight: 10 },
-  titulo: { flex: 1, fontSize: 20, fontWeight: 'bold', color: '#111827' },
-  direita: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
+  barra: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: cores.primaria,
+    marginHorizontal: -16,
+    marginTop: -56,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
+    minHeight: 64,
+  },
+  esquerda: { width: 40 },
+  titulo: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 17, fontWeight: 'bold' },
+  direita: { minWidth: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
 });

@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import { cores } from '../ui/tema';
 
 // "2026-10-29 19:25:10" -> "29/10/2026 às 19:25"
 const dataHoraBR = (s) => {
@@ -172,7 +173,7 @@ export default function LogAcesso() {
         renderItem={({ item }) => {
           const saida = item.evento === 'logout';
           const titulo = saida ? 'Saída' : item.sucesso ? 'Login' : 'Tentativa falha';
-          const cor = saida ? '#6b7280' : item.sucesso ? '#16a34a' : '#dc2626';
+          const cor = saida ? cores.textoSecundario : item.sucesso ? cores.texto : cores.perigo;
           return (
             <View style={styles.caixa}>
               <View style={styles.topo}>
@@ -193,37 +194,37 @@ export default function LogAcesso() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   filtros: { marginBottom: 4 },
   busca: { backgroundColor: '#fff', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  chipAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  resumo: { fontSize: 13, color: '#374151', fontWeight: '600', marginBottom: 10 },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  resumo: { fontSize: 13, color: cores.textoMedio, fontWeight: '600', marginBottom: 10 },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titulo: { fontSize: 15, fontWeight: 'bold' },
-  data: { fontSize: 13, color: '#6b7280' },
-  email: { fontSize: 15, fontWeight: '600', color: '#111827', marginTop: 4 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  motivo: { fontSize: 13, color: '#dc2626', marginTop: 4 },
+  data: { fontSize: 13, color: cores.textoSecundario },
+  email: { fontSize: 15, fontWeight: '600', color: cores.texto, marginTop: 4 },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
+  motivo: { fontSize: 13, color: cores.perigo, marginTop: 4 },
   maisBotao: {
     borderWidth: 1,
-    borderColor: '#2563eb',
+    borderColor: cores.primaria,
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 4,
   },
-  maisTexto: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  maisTexto: { color: cores.primaria, fontWeight: '600', fontSize: 15 },
 });

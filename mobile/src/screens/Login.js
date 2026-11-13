@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
+import { cores } from '../ui/tema';
 
 export default function Login() {
   const { entrar } = useAuth();
@@ -83,21 +84,21 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', justifyContent: 'center', padding: 24 },
+  tela: { flex: 1, backgroundColor: cores.fundo, justifyContent: 'center', padding: 24 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  subtitulo: { fontSize: 14, color: '#6b7280', marginTop: 4, marginBottom: 20 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  subtitulo: { fontSize: 14, color: cores.textoSecundario, marginTop: 4, marginBottom: 20 },
   campo: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
     marginBottom: 12,
   },
-  erro: { color: '#dc2626', marginBottom: 12 },
+  erro: { color: cores.perigo, marginBottom: 12 },
   botao: {
-    backgroundColor: '#2563eb',
+    backgroundColor: cores.primaria,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',

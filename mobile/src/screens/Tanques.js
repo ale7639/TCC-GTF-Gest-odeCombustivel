@@ -15,7 +15,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 import Cabecalho from '../components/Cabecalho';
+import Moldura from '../ui/Moldura';
 import Entradas from './Entradas';
+import { cores } from '../ui/tema';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -254,7 +256,7 @@ export default function Tanques() {
                     <View
                       style={[
                         styles.barra,
-                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
+                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? cores.perigo : cores.primaria },
                       ]}
                     />
                   </View>
@@ -273,12 +275,13 @@ export default function Tanques() {
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.tela}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>{editando === 'novo' ? 'Novo tanque' : 'Editar tanque'}</Text>
+          <Cabecalho titulo={editando === 'novo' ? 'Novo tanque' : 'Editar tanque'} aoVoltar={fechar} />
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
 
@@ -377,81 +380,89 @@ export default function Tanques() {
             </Pressable>
           )}
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   cabecalho: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: cores.texto, flexShrink: 1, marginRight: 8 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   segmentos: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb',
+    backgroundColor: cores.bordaClara,
     borderRadius: 8,
     padding: 3,
     marginBottom: 12,
   },
   segmento: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  segmentoAtivo: { backgroundColor: '#2563eb' },
-  segmentoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
+  segmentoAtivo: { backgroundColor: cores.primaria },
+  segmentoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  nomeItem: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  alerta: { color: '#dc2626', fontWeight: 'bold', fontSize: 12 },
-  barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
+  nomeItem: { fontSize: 15, fontWeight: '600', color: cores.texto },
+  alerta: { color: cores.perigo, fontWeight: 'bold', fontSize: 12 },
+  barraFundo: { height: 10, backgroundColor: cores.bordaClara, borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
-  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
+  custo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
   },
-  somenteLeitura: { fontSize: 15, color: '#111827' },
+  somenteLeitura: { fontSize: 15, color: cores.texto },
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  opcaoTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
   botaoExcluir: {
     borderWidth: 1,
-    borderColor: '#dc2626',
+    borderColor: cores.perigo,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginTop: 16,
   },
-  botaoExcluirAtivo: { backgroundColor: '#dc2626' },
-  botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  botaoExcluirAtivo: { backgroundColor: cores.perigo },
+  botaoExcluirTexto: { color: cores.perigo, fontSize: 15, fontWeight: '600' },
 });

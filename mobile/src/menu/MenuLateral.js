@@ -3,6 +3,7 @@ import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } fro
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { useMenu } from './MenuContext';
+import { cores } from '../ui/tema';
 
 const LARGURA = 280;
 
@@ -89,9 +90,9 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
               <MaterialCommunityIcons
                 name={item.icone}
                 size={22}
-                color={ativo ? '#2563eb' : '#374151'}
+                color={ativo ? cores.primaria : cores.textoMedio}
               />
-              <Text style={[styles.itemTexto, ativo && { color: '#2563eb' }]}>{item.rotulo}</Text>
+              <Text style={[styles.itemTexto, ativo && { color: cores.primaria }]}>{item.rotulo}</Text>
             </Pressable>
           );
         })}
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
     width: 260,
     backgroundColor: '#fff',
     borderRightWidth: 1,
-    borderRightColor: '#e5e7eb',
+    borderRightColor: cores.bordaClara,
     paddingTop: 24,
     paddingBottom: 16,
     justifyContent: 'space-between',
@@ -150,10 +151,10 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     justifyContent: 'space-between',
   },
-  topo: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  marca: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  usuario: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 10 },
-  email: { fontSize: 13, color: '#6b7280', marginTop: 2 },
+  topo: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: cores.bordaClara },
+  marca: { fontSize: 18, fontWeight: 'bold', color: cores.texto },
+  usuario: { fontSize: 14, fontWeight: '600', color: cores.textoMedio, marginTop: 10 },
+  email: { fontSize: 13, color: cores.textoSecundario, marginTop: 2 },
   itens: { flex: 1, paddingTop: 8 },
   item: {
     flexDirection: 'row',
@@ -165,14 +166,14 @@ const styles = StyleSheet.create({
   secao: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#9ca3af',
+    color: cores.textoClaro,
     textTransform: 'uppercase',
     paddingHorizontal: 20,
     marginTop: 12,
     marginBottom: 2,
   },
-  itemAtivo: { backgroundColor: '#eff6ff' },
-  itemTexto: { fontSize: 16, fontWeight: '500', color: '#374151' },
+  itemAtivo: { backgroundColor: cores.primariaClara },
+  itemTexto: { fontSize: 16, fontWeight: '500', color: cores.textoMedio },
   sair: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: cores.bordaClara,
   },
-  sairTexto: { fontSize: 16, fontWeight: '600', color: '#dc2626' },
+  sairTexto: { fontSize: 16, fontWeight: '600', color: cores.perigo },
 });

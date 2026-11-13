@@ -11,9 +11,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import Moldura from '../ui/Moldura';
+import { cores } from '../ui/tema';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -188,6 +190,12 @@ export default function Abastecimentos() {
     setFormAberto(false);
     setErroForm(null);
   };
+
+  // Veio do botão "Abastecer caminhão" do Painel: já abre o formulário.
+  const rota = useRoute();
+  useEffect(() => {
+    if (rota.params?.novo) abrirNovo();
+  }, [rota.params?.novo]);
 
   const salvar = async () => {
     const litros = Number(String(form.litros).replace(',', '.'));
@@ -369,12 +377,13 @@ export default function Abastecimentos() {
 
       {/* Formulário de novo abastecimento */}
       <Modal visible={formAberto} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.tela}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>Novo abastecimento</Text>
+          <Cabecalho titulo="Novo abastecimento" aoVoltar={fechar} />
 
           <Text style={styles.rotulo}>Caminhão</Text>
           <View style={styles.opcoes}>
@@ -436,15 +445,23 @@ export default function Abastecimentos() {
             <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
           </Pressable>
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
 
   filtros: { marginBottom: 4 },
@@ -452,42 +469,42 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  chipAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  resumo: { fontSize: 13, color: '#374151', fontWeight: '600', marginBottom: 10 },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  resumo: { fontSize: 13, color: cores.textoMedio, fontWeight: '600', marginBottom: 10 },
 
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  principal: { fontSize: 17, fontWeight: 'bold', color: '#111827' },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  consumo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
-  excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
-  excluirAtivo: { color: '#dc2626' },
+  principal: { fontSize: 17, fontWeight: 'bold', color: cores.texto },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
+  consumo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
+  excluir: { fontSize: 13, color: cores.textoSecundario, fontWeight: '600' },
+  excluirAtivo: { color: cores.perigo },
   maisBotao: {
     borderWidth: 1,
-    borderColor: '#2563eb',
+    borderColor: cores.primaria,
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 4,
   },
-  maisTexto: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  maisTexto: { color: cores.primaria, fontWeight: '600', fontSize: 15 },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -495,19 +512,19 @@ const styles = StyleSheet.create({
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  aviso: { color: '#6b7280' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  aviso: { color: cores.textoSecundario },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
 });

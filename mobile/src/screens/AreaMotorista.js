@@ -14,8 +14,11 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
+import Moldura from '../ui/Moldura';
 import { useAuth } from '../auth/AuthContext';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
+import { cores } from '../ui/tema';
 
 // ---------- Funções de formatação ----------
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -56,9 +59,9 @@ function Opcao({ texto, ativo, aoTocar }) {
 }
 
 const STATUS = {
-  pendente: { texto: 'Aguardando aprovação', cor: '#b45309' },
-  aprovado: { texto: 'Aprovado', cor: '#16a34a' },
-  recusado: { texto: 'Recusado', cor: '#dc2626' },
+  pendente: { texto: 'Aguardando aprovação', cor: cores.primaria },
+  aprovado: { texto: 'Aprovado', cor: cores.texto },
+  recusado: { texto: 'Recusado', cor: cores.perigo },
 };
 
 function EtiquetaStatus({ status }) {
@@ -74,8 +77,9 @@ function EtiquetaStatus({ status }) {
 function Formulario({ titulo, visivel, aoFechar, aoEnviar, enviando, erro, aprovacao = false, children }) {
   return (
     <Modal visible={visivel} animationType="slide" onRequestClose={aoFechar}>
+      <Moldura>
       <ScrollView style={styles.modal} contentContainerStyle={styles.formConteudo} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titulo}>{titulo}</Text>
+        <Cabecalho titulo={titulo} aoVoltar={aoFechar} />
         {aprovacao && (
           <Text style={styles.aviso}>O abastecimento só vale depois que o administrador aprovar.</Text>
         )}
@@ -92,6 +96,7 @@ function Formulario({ titulo, visivel, aoFechar, aoEnviar, enviando, erro, aprov
           <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
         </Pressable>
       </ScrollView>
+      </Moldura>
     </Modal>
   );
 }
@@ -397,15 +402,12 @@ export default function AreaMotorista() {
 
   return (
     <View style={styles.tela}>
-      <View style={styles.topo}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.titulo}>Olá, {dados?.motorista?.nome?.split(' ')[0] ?? ''}</Text>
-          <Text style={styles.detalhe}>Área do motorista</Text>
-        </View>
-        <Pressable onPress={sair}>
+      <Cabecalho titulo="ÁREA DO MOTORISTA">
+        <Pressable onPress={sair} hitSlop={8}>
           <Text style={styles.sair}>Sair</Text>
         </Pressable>
-      </View>
+      </Cabecalho>
+      <Text style={styles.titulo}>Olá, {dados?.motorista?.nome?.split(' ')[0] ?? ''}</Text>
 
       {erro && <Text style={styles.erroTela}>{erro}</Text>}
       {!dados && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
@@ -460,36 +462,36 @@ export default function AreaMotorista() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   topo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  sair: { fontSize: 16, fontWeight: '600', color: '#dc2626' },
-  erroTela: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  sair: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  erroTela: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
   caixaCaminhao: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12 },
-  placa: { fontSize: 26, fontWeight: 'bold', color: '#111827' },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 3 },
+  placa: { fontSize: 26, fontWeight: 'bold', color: cores.texto },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 3 },
   acoes: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  acao: { flex: 1, backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  acao: { flex: 1, backgroundColor: cores.primaria, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   acaoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  sucesso: { color: '#16a34a', fontWeight: '600', marginBottom: 8 },
-  secao: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 8, marginTop: 4 },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 30 },
+  sucesso: { color: cores.texto, fontWeight: '600', marginBottom: 8 },
+  secao: { fontSize: 18, fontWeight: '600', color: cores.texto, marginBottom: 8, marginTop: 4 },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 30 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   linhaTopo: { flexDirection: 'row', justifyContent: 'space-between' },
-  itemTitulo: { fontSize: 16, fontWeight: 'bold', color: '#111827', flexShrink: 1 },
+  itemTitulo: { fontSize: 16, fontWeight: 'bold', color: cores.texto, flexShrink: 1 },
   etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
-  motivo: { fontSize: 13, color: '#dc2626', marginTop: 6 },
+  motivo: { fontSize: 13, color: cores.perigo, marginTop: 6 },
 
-  modal: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  modal: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
-  aviso: { fontSize: 13, color: '#6b7280', marginBottom: 12 },
+  aviso: { fontSize: 13, color: cores.textoSecundario, marginBottom: 12 },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -497,18 +499,18 @@ const styles = StyleSheet.create({
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12, marginTop: 6 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12, marginTop: 6 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
 });

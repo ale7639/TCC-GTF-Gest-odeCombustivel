@@ -14,6 +14,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import Moldura from '../ui/Moldura';
+import { cores } from '../ui/tema';
 
 // 15000 -> "15.000"
 const numero = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -26,9 +28,9 @@ const mensagemDe = (e) =>
 
 // Os três status possíveis, com o texto e a cor de cada um.
 const STATUS = [
-  { valor: 'ativo', rotulo: 'Ativo', cor: '#16a34a' },
-  { valor: 'manutencao', rotulo: 'Manutenção', cor: '#d97706' },
-  { valor: 'inativo', rotulo: 'Inativo', cor: '#6b7280' },
+  { valor: 'ativo', rotulo: 'Ativo', cor: cores.texto },
+  { valor: 'manutencao', rotulo: 'Manutenção', cor: cores.primaria },
+  { valor: 'inativo', rotulo: 'Inativo', cor: cores.textoSecundario },
 ];
 const infoStatus = (valor) => STATUS.find((s) => s.valor === valor) ?? STATUS[2];
 
@@ -239,10 +241,10 @@ export default function Caminhoes() {
       {/* Cartões com o resumo da frota: tocar em um deles filtra a lista */}
       <View style={styles.cartoes}>
         {[
-          ['todos', 'Total', '#2563eb'],
-          ['ativo', 'Ativos', '#16a34a'],
-          ['manutencao', 'Manutenção', '#d97706'],
-          ['inativo', 'Inativos', '#6b7280'],
+          ['todos', 'Total', cores.primaria],
+          ['ativo', 'Ativos', cores.texto],
+          ['manutencao', 'Manutenção', cores.primaria],
+          ['inativo', 'Inativos', cores.textoSecundario],
         ].map(([valor, rotulo, cor]) => (
           <Pressable
             key={valor}
@@ -302,12 +304,13 @@ export default function Caminhoes() {
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.tela}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>{editando === 'novo' ? 'Novo caminhão' : 'Editar caminhão'}</Text>
+          <Cabecalho titulo={editando === 'novo' ? 'Novo caminhão' : 'Editar caminhão'} aoVoltar={fechar} />
 
           <Campo
             rotulo="Placa"
@@ -401,21 +404,22 @@ export default function Caminhoes() {
             </Pressable>
           )}
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   cabecalho: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: cores.texto, flexShrink: 1, marginRight: 8 },
   cartoes: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   cartaoFiltro: {
     flex: 1,
@@ -427,8 +431,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cartaoNumero: { fontSize: 22, fontWeight: 'bold' },
-  cartaoRotulo: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  cartaoRotulo: { fontSize: 12, color: cores.textoSecundario, marginTop: 2 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   busca: {
     backgroundColor: '#fff',
@@ -437,23 +448,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 12,
   },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
   caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  placa: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  modelo: { fontSize: 15, color: '#111827', marginTop: 4 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  placa: { fontSize: 18, fontWeight: 'bold', color: cores.texto },
+  modelo: { fontSize: 15, color: cores.texto, marginTop: 4 },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
   etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
   formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -462,38 +473,38 @@ const styles = StyleSheet.create({
   opcao: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
   },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
   opcoesQuebra: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcaoSimples: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoSimplesAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  opcaoSimplesTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoSimplesAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoSimplesTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
   botaoExcluir: {
     borderWidth: 1,
-    borderColor: '#dc2626',
+    borderColor: cores.perigo,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginTop: 16,
   },
-  botaoExcluirAtivo: { backgroundColor: '#dc2626' },
-  botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  botaoExcluirAtivo: { backgroundColor: cores.perigo },
+  botaoExcluirTexto: { color: cores.perigo, fontSize: 15, fontWeight: '600' },
 });
