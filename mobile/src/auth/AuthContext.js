@@ -34,11 +34,11 @@ export function AuthProvider({ children }) {
     definirAoExpirar(limparSessao);
   }, []);
 
-  // Envia e-mail e senha; se estiverem certos, guarda o token.
-  const entrar = async (email, senha) => {
+  // Envia login (e-mail do admin ou CPF do motorista) e senha; se estiverem certos, guarda o token.
+  const entrar = async (login, senha) => {
     const dados = await api('/login', {
       metodo: 'POST',
-      corpo: { email, password: senha },
+      corpo: { login, password: senha },
     });
     await armazenamento.gravar('token', dados.token);
     await armazenamento.gravar('usuario', JSON.stringify(dados.usuario));

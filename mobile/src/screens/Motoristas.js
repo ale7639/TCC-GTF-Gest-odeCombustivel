@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
@@ -33,11 +34,16 @@ const formVazio = () => ({
   telefone: '',
   ativo: true,
   caminhao_id: null, // null = sem caminhão
-  acesso_email: '',  // login do motorista (opcional)
-  acesso_senha: '',
+  acesso_senha: '',  // senha de acesso ao app (o motorista entra com o CPF)
 });
 
-// Etiqueta colorida: verde para ativo, cinza para inativo.
+// Iniciais do nome para o "avatar": "João Pedro Almeida" -> "JA".
+const iniciais = (nome) => {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+};
+
+// Etiqueta de situação: ativo (neutro) ou inativo (cinza claro).
 function Etiqueta({ ativo }) {
   const cor = ativo ? cores.texto : cores.textoSecundario;
   return (
@@ -144,12 +150,11 @@ export default function Motoristas() {
       telefone: m.telefone ?? '',
       ativo: Boolean(m.ativo),
       caminhao_id: m.caminhao?.id ?? null,
-      acesso_email: m.acesso_email ?? '',
       acesso_senha: '',
     });
     setErroForm(null);
     setConfirmando(false);
-    setTemAcesso(Boolean(m.acesso_email));
+    setTemAcesso(Boolean(m.tem_acesso));
     setMsgAcesso(null);
     setEditando(m);
   };
@@ -177,8 +182,8 @@ export default function Motoristas() {
       setErroForm('A CNH deve ter 11 números.');
       return;
     }
-    if (form.acesso_email.trim() && !temAcesso && form.acesso_senha.length < 6) {
-      setErroForm('Defina uma senha de pelo menos 6 caracteres para o acesso do motorista.');
+    if (form.acesso_senha && form.acesso_senha.length < 6) {
+      setErroForm('A senha de acesso precisa ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -189,7 +194,6 @@ export default function Motoristas() {
       telefone: form.telefone.trim(),
       ativo: form.ativo,
       caminhao_id: form.caminhao_id,
-      acesso_email: form.acesso_email.trim() || null,
       acesso_senha: form.acesso_senha || null,
     };
 
@@ -216,7 +220,7 @@ export default function Motoristas() {
     try {
       await api(`/motoristas/${editando.id}/acesso`, { metodo: 'DELETE' });
       setTemAcesso(false);
-      setForm((atual) => ({ ...atual, acesso_email: '', acesso_senha: '' }));
+      setForm((atual) => ({ ...atual, acesso_senha: '' }));
       setMsgAcesso({ texto: 'Acesso removido.', erro: false });
       carregar();
     } catch (e) {
@@ -285,26 +289,55 @@ export default function Motoristas() {
         contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => (
           <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-            <View style={styles.topo}>
-              <Text style={styles.nome}>{item.nome}</Text>
+            {/* Topo: iniciais + nome e telefone + situação */}
+            <View style={styles.topoCartao}>
+              <View style={[styles.avatar, !item.ativo && styles.avatarInativo]}>
+                <Text style={[styles.avatarTexto, !item.ativo && { color: cores.textoSecundario }]}>
+                  {iniciais(item.nome)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nome} numberOfLines={1}>
+                  {item.nome}
+                </Text>
+                <Text style={styles.detalhe}>{item.telefone || 'sem telefone'}</Text>
+              </View>
               <Etiqueta ativo={Boolean(item.ativo)} />
             </View>
-            <Text style={styles.detalhe}>
-              CPF {item.cpf} · CNH {item.cnh}
-            </Text>
-            {item.telefone ? <Text style={styles.detalhe}>{item.telefone}</Text> : null}
+
+            {/* Dados em duas colunas */}
+            <View style={styles.dados}>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>CPF</Text>
+                <Text style={styles.dadoValor}>{item.cpf}</Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>CNH</Text>
+                <Text style={styles.dadoValor}>{item.cnh}</Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>Caminhão</Text>
+                <Text style={styles.dadoValor} numberOfLines={1}>
+                  {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
+                </Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>Acesso ao app</Text>
+                <Text style={styles.dadoValor}>{item.tem_acesso ? 'Liberado (CPF)' : 'Sem acesso'}</Text>
+              </View>
+            </View>
+
+            {/* WhatsApp discreto no rodapé */}
             {linkWhatsApp(item.telefone) && (
               <Pressable
-                style={styles.whats}
+                style={styles.whatsLink}
+                hitSlop={6}
                 onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
               >
-                <Text style={styles.whatsTexto}>Conversar no WhatsApp</Text>
+                <MaterialCommunityIcons name="whatsapp" size={18} color={cores.whatsapp} />
+                <Text style={styles.whatsLinkTexto}>Conversar no WhatsApp</Text>
               </Pressable>
             )}
-            <Text style={styles.detalhe}>
-              Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
-            </Text>
-            <Text style={styles.detalhe}>Acesso: {item.acesso_email ?? 'sem login'}</Text>
           </Pressable>
         )}
       />
@@ -368,19 +401,14 @@ export default function Motoristas() {
             ))}
           </View>
 
-          <Text style={styles.secaoAcesso}>Acesso ao sistema (opcional)</Text>
+          <Text style={styles.secaoAcesso}>Acesso ao app (opcional)</Text>
           <Text style={styles.dica}>
-            Preencha para o motorista poder entrar no app. Ele verá só o caminhão dele.
+            O motorista entra com o CPF deste cadastro e a senha definida aqui. Ele vê só o caminhão dele.
           </Text>
           <View style={styles.caixaAcesso}>
-            <Campo
-              rotulo="E-mail de acesso"
-              placeholder="Ex.: joao@empresa.com"
-              value={form.acesso_email}
-              onChangeText={(v) => mudar('acesso_email', v)}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+            <Text style={styles.situacaoAcesso}>
+              {temAcesso ? 'Acesso liberado · login pelo CPF' : 'Sem acesso ao app'}
+            </Text>
             <Campo
               rotulo={temAcesso ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha (mínimo 6 caracteres)'}
               value={form.acesso_senha}
@@ -520,4 +548,29 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   whatsTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  topoCartao: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: cores.primariaClara,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInativo: { backgroundColor: cores.bordaClara },
+  avatarTexto: { color: cores.primaria, fontWeight: 'bold', fontSize: 15 },
+  dados: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: cores.bordaClara,
+  },
+  dado: { width: '50%', paddingVertical: 4, paddingRight: 8 },
+  dadoRotulo: { fontSize: 11, color: cores.textoSecundario },
+  dadoValor: { fontSize: 13, fontWeight: '600', color: cores.texto, marginTop: 1 },
+  whatsLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-start' },
+  whatsLinkTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  situacaoAcesso: { fontSize: 13, fontWeight: '600', color: cores.textoMedio, marginBottom: 10 },
 });

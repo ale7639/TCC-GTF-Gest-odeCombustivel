@@ -14,21 +14,21 @@ import { cores } from '../ui/tema';
 
 export default function Login() {
   const { entrar } = useAuth();
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState(''); // e-mail (admin) ou CPF (motorista)
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState(null);
   const [enviando, setEnviando] = useState(false);
 
   const enviar = async () => {
-    if (!email.trim() || !senha) {
-      setErro('Informe e-mail e senha.');
+    if (!login.trim() || !senha) {
+      setErro('Informe o e-mail ou CPF e a senha.');
       return;
     }
 
     setErro(null);
     setEnviando(true);
     try {
-      await entrar(email.trim(), senha);
+      await entrar(login.trim(), senha);
       // Se deu certo, o App troca esta tela pelo painel automaticamente.
     } catch (e) {
       const semConexao = e.name === 'AbortError' || e.message === 'Network request failed';
@@ -45,16 +45,15 @@ export default function Login() {
     >
       <View style={styles.caixa}>
         <Text style={styles.titulo}>Gestão de Frota</Text>
-        <Text style={styles.subtitulo}>Entre com sua conta de administrador</Text>
+        <Text style={styles.subtitulo}>Administrador: e-mail · Motorista: CPF</Text>
 
         <TextInput
           style={styles.campo}
-          placeholder="E-mail"
-          value={email}
-          onChangeText={setEmail}
+          placeholder="E-mail ou CPF"
+          value={login}
+          onChangeText={setLogin}
           autoCapitalize="none"
           autoCorrect={false}
-          keyboardType="email-address"
         />
         <TextInput
           style={styles.campo}
