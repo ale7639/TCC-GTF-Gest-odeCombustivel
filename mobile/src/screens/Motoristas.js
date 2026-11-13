@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,7 +15,10 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import SeletorLista from '../components/SeletorLista';
 import { linkWhatsApp, mascaraCPF, mascaraTelefone, somenteDigitos } from '../utils/formatos';
+
+const POR_PAGINA = 15;
 
 // Mensagem amigável para qualquer erro de comunicação com a API.
 const mensagemDe = (e) =>
@@ -31,8 +34,7 @@ const formVazio = () => ({
   telefone: '',
   ativo: true,
   caminhao_id: null, // null = sem caminhão
-  acesso_email: '',  // login do motorista (opcional)
-  acesso_senha: '',
+  acesso_senha: '', // login = CPF; senha definida/redefinida pelo ADM
 });
 
 // Etiqueta colorida: verde para ativo, cinza para inativo.
@@ -71,6 +73,7 @@ export default function Motoristas() {
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
+  const [visiveis, setVisiveis] = useState(POR_PAGINA);
 
   // editando: null = formulário fechado | 'novo' = cadastrando | objeto = alterando aquele motorista
   const [editando, setEditando] = useState(null);
@@ -117,11 +120,29 @@ export default function Motoristas() {
     );
   }, [motoristas, busca]);
 
+  useEffect(() => {
+    setVisiveis(POR_PAGINA);
+  }, [busca, motoristas]);
+
+  const pagina = filtrados.slice(0, visiveis);
+  const temMais = visiveis < filtrados.length;
+
   // Caminhões que podem ser escolhidos: os sem motorista e o que já é deste motorista.
   const caminhoesDisponiveis = useMemo(() => {
     const idDele = editando && editando !== 'novo' ? editando.id : null;
     return caminhoes.filter((c) => !c.motorista_id || c.motorista_id === idDele);
   }, [caminhoes, editando]);
+
+  const opcoesCaminhao = useMemo(
+    () => [
+      { valor: null, rotulo: 'Nenhum' },
+      ...caminhoesDisponiveis.map((c) => ({
+        valor: c.id,
+        rotulo: `${c.placa} · ${c.modelo}`,
+      })),
+    ],
+    [caminhoesDisponiveis]
+  );
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
@@ -142,12 +163,11 @@ export default function Motoristas() {
       telefone: m.telefone ?? '',
       ativo: Boolean(m.ativo),
       caminhao_id: m.caminhao?.id ?? null,
-      acesso_email: m.acesso_email ?? '',
       acesso_senha: '',
     });
     setErroForm(null);
     setConfirmando(false);
-    setTemAcesso(Boolean(m.acesso_email));
+    setTemAcesso(Boolean(m.tem_acesso ?? m.acesso_email));
     setMsgAcesso(null);
     setEditando(m);
   };
@@ -175,8 +195,8 @@ export default function Motoristas() {
       setErroForm('A CNH deve ter 11 números.');
       return;
     }
-    if (form.acesso_email.trim() && !temAcesso && form.acesso_senha.length < 6) {
-      setErroForm('Defina uma senha de pelo menos 6 caracteres para o acesso do motorista.');
+    if (form.acesso_senha && form.acesso_senha.length < 6) {
+      setErroForm('A senha precisa ter pelo menos 6 caracteres (ou deixe em branco).');
       return;
     }
 
@@ -187,7 +207,6 @@ export default function Motoristas() {
       telefone: form.telefone.trim(),
       ativo: form.ativo,
       caminhao_id: form.caminhao_id,
-      acesso_email: form.acesso_email.trim() || null,
       acesso_senha: form.acesso_senha || null,
     };
 
@@ -214,7 +233,7 @@ export default function Motoristas() {
     try {
       await api(`/motoristas/${editando.id}/acesso`, { metodo: 'DELETE' });
       setTemAcesso(false);
-      setForm((atual) => ({ ...atual, acesso_email: '', acesso_senha: '' }));
+      setForm((atual) => ({ ...atual, acesso_senha: '' }));
       setMsgAcesso({ texto: 'Acesso removido.', erro: false });
       carregar();
     } catch (e) {
@@ -247,65 +266,84 @@ export default function Motoristas() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="GESTÃO DE MOTORISTAS">
+      <Cabecalho titulo="Motoristas">
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
       </Cabecalho>
 
-      <TextInput
-        style={styles.busca}
-        placeholder="Buscar por nome ou CPF"
-        value={busca}
-        onChangeText={setBusca}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      <View style={styles.corpo}>
+        <TextInput
+          style={styles.busca}
+          placeholder="Buscar por nome ou CPF"
+          value={busca}
+          onChangeText={setBusca}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
-
-      <FlatList
-        data={filtrados}
-        keyExtractor={(item) => String(item.id)}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
-              carregar();
-            }}
-          />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum motorista encontrado.</Text> : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => (
-          <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-            <View style={styles.topo}>
-              <Text style={styles.nome}>{item.nome}</Text>
-              <Etiqueta ativo={Boolean(item.ativo)} />
-            </View>
-            <Text style={styles.detalhe}>
-              CPF {item.cpf} · CNH {item.cnh}
-            </Text>
-            {item.telefone ? <Text style={styles.detalhe}>{item.telefone}</Text> : null}
-            {linkWhatsApp(item.telefone) && (
-              <Pressable
-                style={styles.whats}
-                onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
-              >
-                <Text style={styles.whatsTexto}>Conversar no WhatsApp</Text>
-              </Pressable>
-            )}
-            <Text style={styles.detalhe}>
-              Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
-            </Text>
-            <Text style={styles.detalhe}>Acesso: {item.acesso_email ?? 'sem login'}</Text>
-          </Pressable>
+        {filtrados.length > 0 && (
+          <Text style={styles.resumo}>
+            Mostrando {pagina.length} de {filtrados.length}
+          </Text>
         )}
-      />
+
+        {erro && <Text style={styles.erro}>{erro}</Text>}
+        {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+        <FlatList
+          data={pagina}
+          keyExtractor={(item) => String(item.id)}
+          refreshControl={
+            <RefreshControl
+              refreshing={atualizando}
+              onRefresh={() => {
+                setAtualizando(true);
+                carregar();
+              }}
+            />
+          }
+          ListEmptyComponent={
+            !carregando && !erro ? <Text style={styles.vazio}>Nenhum motorista encontrado.</Text> : null
+          }
+          ListFooterComponent={
+            temMais ? (
+              <Pressable style={styles.maisBotao} onPress={() => setVisiveis((n) => n + POR_PAGINA)}>
+                <Text style={styles.maisTexto}>
+                  Carregar mais ({pagina.length} de {filtrados.length})
+                </Text>
+              </Pressable>
+            ) : null
+          }
+          contentContainerStyle={{ paddingBottom: 88 }}
+          renderItem={({ item }) => (
+            <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
+              <View style={styles.topo}>
+                <Text style={styles.nome}>{item.nome}</Text>
+                <Etiqueta ativo={Boolean(item.ativo)} />
+              </View>
+              <Text style={styles.detalhe}>
+                CPF {item.cpf} · CNH {item.cnh}
+              </Text>
+              {item.telefone ? <Text style={styles.detalhe}>{item.telefone}</Text> : null}
+              {linkWhatsApp(item.telefone) && (
+                <Pressable
+                  style={styles.whats}
+                  onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
+                >
+                  <Text style={styles.whatsTexto}>Conversar no WhatsApp</Text>
+                </Pressable>
+              )}
+              <Text style={styles.detalhe}>
+                Caminhão: {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
+              </Text>
+              <Text style={styles.detalhe}>
+                Acesso: {item.tem_acesso || item.acesso_email ? `CPF ${item.cpf}` : 'sem login'}
+              </Text>
+            </Pressable>
+          )}
+        />
+      </View>
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
@@ -314,7 +352,11 @@ export default function Motoristas() {
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>{editando === 'novo' ? 'Novo motorista' : 'Editar motorista'}</Text>
+          <Cabecalho
+            titulo={editando === 'novo' ? 'Novo motorista' : 'Editar motorista'}
+            aoVoltar={fechar}
+            sangrar
+          />
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
           <Campo
@@ -348,38 +390,30 @@ export default function Motoristas() {
             <Opcao texto="Inativo" ativo={!form.ativo} aoTocar={() => mudar('ativo', false)} />
           </View>
 
-          <Text style={styles.rotulo}>Caminhão responsável</Text>
-          <View style={styles.opcoes}>
-            <Opcao
-              texto="Nenhum"
-              ativo={form.caminhao_id === null}
-              aoTocar={() => mudar('caminhao_id', null)}
-            />
-            {caminhoesDisponiveis.map((c) => (
-              <Opcao
-                key={c.id}
-                texto={c.placa}
-                ativo={form.caminhao_id === c.id}
-                aoTocar={() => mudar('caminhao_id', c.id)}
-              />
-            ))}
-          </View>
+          <SeletorLista
+            rotulo="Caminhão responsável"
+            valor={form.caminhao_id}
+            opcoes={opcoesCaminhao}
+            aoMudar={(id) => mudar('caminhao_id', id)}
+            placeholder="Escolher caminhão…"
+            placeholderBusca="Buscar placa…"
+            vazio="Nenhum caminhão disponível."
+          />
 
-          <Text style={styles.secaoAcesso}>Acesso ao sistema (opcional)</Text>
+          <Text style={styles.secaoAcesso}>Acesso ao app</Text>
           <Text style={styles.dica}>
-            Preencha para o motorista poder entrar no app. Ele verá só o caminhão dele.
+            O login do motorista é o CPF. Ao salvar, a conta é criada automaticamente. Senha
+            inicial = CPF (só números), ou informe outra abaixo.
           </Text>
           <View style={styles.caixaAcesso}>
+            <Text style={styles.rotulo}>Identificador (CPF)</Text>
+            <Text style={styles.cpfLogin}>{form.cpf || '— informe o CPF acima —'}</Text>
             <Campo
-              rotulo="E-mail de acesso"
-              placeholder="Ex.: joao@empresa.com"
-              value={form.acesso_email}
-              onChangeText={(v) => mudar('acesso_email', v)}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <Campo
-              rotulo={temAcesso ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha (mínimo 6 caracteres)'}
+              rotulo={
+                temAcesso
+                  ? 'Redefinir senha (deixe em branco para manter)'
+                  : 'Senha (opcional; padrão = dígitos do CPF)'
+              }
               value={form.acesso_senha}
               onChangeText={(v) => mudar('acesso_senha', v)}
               secureTextEntry
@@ -388,7 +422,7 @@ export default function Motoristas() {
             {msgAcesso && (
               <Text style={msgAcesso.erro ? styles.erroForm : styles.okAcesso}>{msgAcesso.texto}</Text>
             )}
-            {temAcesso && (
+            {temAcesso && editando !== 'novo' && (
               <Pressable onPress={removerAcesso} disabled={salvando}>
                 <Text style={styles.removerAcesso}>Remover acesso deste motorista</Text>
               </Pressable>
@@ -427,34 +461,49 @@ export default function Motoristas() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  cabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
   busca: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 10 },
+  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
+  maisBotao: {
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 12,
-    fontSize: 15,
-    marginBottom: 12,
+    alignItems: 'center',
+    marginTop: 4,
   },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  nome: { fontSize: 17, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
+  nome: { fontSize: 17, fontWeight: '700', color: '#1f2937', flexShrink: 1, marginRight: 8 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
+  etiqueta: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
-  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  formConteudo: {
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
@@ -475,10 +524,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: 'center',
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
@@ -496,8 +545,15 @@ const styles = StyleSheet.create({
   secaoAcesso: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 8 },
   dica: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
   caixaAcesso: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 },
-  botaoAcesso: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 12, alignItems: 'center' },
-  botaoAcessoTexto: { color: '#2563eb', fontSize: 15, fontWeight: '600' },
+  cpfLogin: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+  },
   removerAcesso: { color: '#dc2626', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   okAcesso: { color: '#16a34a', marginBottom: 12, fontWeight: '600' },
   whats: {

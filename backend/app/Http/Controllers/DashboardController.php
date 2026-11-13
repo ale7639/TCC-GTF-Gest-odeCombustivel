@@ -4,109 +4,140 @@ namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
 use App\Models\Caminhao;
-use App\Models\ChecklistPreViagem;
+use App\Models\EntradaCombustivel;
 use App\Models\Manutencao;
+use App\Models\NotaFiscal;
+use App\Models\SolicitacaoSenha;
 use App\Models\Tanque;
+use App\Support\Lancamentos;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    // PAINEL — GET /api/dashboard?dias=7|30|90 (totais, tanques, frota, recentes).
     public function index(Request $request): JsonResponse
     {
-        $usuario = $request->user();
-        $inicio = now()->subDays(30)->toDateString();
-        $hoje = now()->toDateString();
-
-        $caminhoes = Caminhao::query();
-        $abastecimentos = Abastecimento::query();
-        if ($usuario->isMotorista()) {
-            $caminhoes->where('motorista_id', $usuario->motorista_id);
-            $abastecimentos->where('motorista_id', $usuario->motorista_id);
+        // PAINEL PERIODO — só aceita 7|30|90; qualquer outro valor vira 30 dias.
+        $dias = (int) $request->query('dias', 30);
+        if (! in_array($dias, [7, 30, 90], true)) {
+            $dias = 30;
         }
+        $inicio = now()->subDays($dias)->toDateString();
 
-        $ultimos = (clone $abastecimentos)
-            ->with(['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'])
-            ->orderByDesc('data')
-            ->orderByDesc('id')
-            ->limit(5)
-            ->get()
-            ->map(fn ($a) => [
-                'id' => $a->id,
-                'data' => $a->data->toDateString(),
-                'litros' => (float) $a->litros,
-                'origem' => $a->origem,
-                'placa' => $a->caminhao?->placa,
-                'motorista' => $a->motorista?->nome,
-                'tanque' => $a->tanque?->nome,
-                'comprovante_url' => $a->comprovante_url,
-            ]);
-
-        $hojeQuery = (clone $abastecimentos)->whereDate('data', $hoje);
-        $totalFrota = (clone $caminhoes)->where('status', '!=', 'inativo')->count();
-        $ativos = (clone $caminhoes)->where('status', 'ativo')->count();
-        $emManut = (clone $caminhoes)->where('status', 'manutencao')->count();
-
-        // Motorista: painel enxuto — sem ruído de tanques/gestão da frota.
-        if ($usuario->isMotorista()) {
-            $meu = (clone $caminhoes)->where('status', '!=', 'inativo')->first();
-
-            return response()->json([
-                'caminhoes' => [
-                    'total' => (clone $caminhoes)->count(),
-                    'ativos' => $ativos,
-                    'em_manutencao' => $emManut,
-                    'disponibilidade_pct' => $totalFrota > 0 ? round(($ativos / $totalFrota) * 100, 1) : null,
-                ],
-                'litros_abastecidos_30_dias' => (float) (clone $abastecimentos)->where('data', '>=', $inicio)->sum('litros'),
-                'abastecimentos_hoje' => (clone $hojeQuery)->count(),
-                'litros_hoje' => (float) (clone $hojeQuery)->sum('litros'),
-                'gasto_manutencao_30_dias' => null,
-                'tanques' => [],
-                'ultimos_abastecimentos' => $ultimos,
-                'alertas' => [],
-                'meu_caminhao' => $meu ? [
-                    'id' => $meu->id,
-                    'placa' => $meu->placa,
-                    'modelo' => $meu->modelo,
-                    'km_atual' => (int) $meu->km_atual,
-                    'status' => $meu->status,
-                ] : null,
-                'checklist_saida' => ChecklistPreViagem::resumoVigencia($meu?->id),
-            ]);
-        }
-
+        // PAINEL TANQUES — percentual e alerta de nível baixo (< 20%).
         $tanques = Tanque::orderBy('nome')->get()->map(function ($tanque) {
             $percentual = $tanque->capacidade > 0
                 ? ($tanque->nivel_atual / $tanque->capacidade) * 100
                 : 0;
 
             return [
-                'id' => $tanque->id,
-                'nome' => $tanque->nome,
+                'id'               => $tanque->id,
+                'nome'             => $tanque->nome,
                 'tipo_combustivel' => $tanque->tipo_combustivel,
-                'capacidade' => (float) $tanque->capacidade,
-                'nivel_atual' => (float) $tanque->nivel_atual,
-                'percentual' => round($percentual, 1),
-                'alerta' => $percentual < 20,
+                'capacidade'       => (float) $tanque->capacidade,
+                'nivel_atual'      => (float) $tanque->nivel_atual,
+                'percentual'       => round($percentual, 1),
+                'alerta'           => $percentual < 20,
+                'principal'        => (bool) $tanque->principal,
+                'custo_medio'      => $tanque->custo_medio,
             ];
         });
 
+        // O principal é o que foi marcado como tal; se nenhum foi, vale o de maior capacidade.
+        $principal = $tanques->firstWhere('principal', true)
+            ?? $tanques->sortByDesc('capacidade')->first();
+
+        $outros = $principal
+            ? $tanques->where('id', '!=', $principal['id'])->values()
+            : $tanques->values();
+
+        // PAINEL RECENTES — 5 abastecimentos; with() traz caminhão, motorista e tanque.
+        $ultimosAbastecimentos = Abastecimento::where('status', 'aprovado')
+            ->with(['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'])
+            ->orderByDesc('data')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->map(fn ($a) => [
+                'id'        => $a->id,
+                'data'      => $a->data->toDateString(),
+                'litros'    => (float) $a->litros,
+                'placa'     => $a->caminhao->placa,
+                'motorista' => $a->motorista->nome,
+                'tanque'    => $a->tanque?->nome ?? 'Fora da base',
+            ]);
+
+        // PAINEL NF — 5 notas fiscais recentes, com o que cada uma comprou.
+        $ultimasNotas = NotaFiscal::with(['entradas.tanque:id,nome', 'manutencoes:id,nota_fiscal_id,tipo'])
+            ->orderByDesc('data_emissao')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->map(function ($nota) {
+                $entrada    = $nota->entradas->first();
+                $manutencao = $nota->manutencoes->first();
+
+                if ($entrada) {
+                    $descricao = 'Combustível · ' . $entrada->tanque->nome . ' · ' . (float) $entrada->litros . ' L';
+                } elseif ($manutencao) {
+                    $descricao = 'Manutenção · ' . $manutencao->tipo;
+                } else {
+                    $descricao = 'Sem vínculo';
+                }
+
+                return [
+                    'id'           => $nota->id,
+                    'numero'       => $nota->numero,
+                    'fornecedor'   => $nota->fornecedor,
+                    'data_emissao' => $nota->data_emissao->toDateString(),
+                    'valor_total'  => (float) $nota->valor_total,
+                    'descricao'    => $descricao,
+                ];
+            });
+
         return response()->json([
-            'caminhoes' => [
-                'total' => (clone $caminhoes)->count(),
-                'ativos' => $ativos,
-                'em_manutencao' => $emManut,
-                'disponibilidade_pct' => $totalFrota > 0 ? round(($ativos / $totalFrota) * 100, 1) : null,
+            'dias' => $dias,
+
+            // PAINEL TOTAIS — litros e gastos do período escolhido.
+            'litros_abastecidos'  => (float) Abastecimento::where('status', 'aprovado')->where('data', '>=', $inicio)->sum('litros'),
+            'litros_comprados'    => (float) EntradaCombustivel::where('data', '>=', $inicio)->sum('litros'),
+            // Compras para os tanques + o que foi pago em postos fora da base (já aprovado).
+            'gasto_combustivel'   => (float) EntradaCombustivel::where('data', '>=', $inicio)->sum('valor_total')
+                + (float) Abastecimento::where('status', 'aprovado')->where('origem', 'externo')
+                    ->where('data', '>=', $inicio)->sum('valor_total'),
+            'gasto_manutencao'    => (float) Manutencao::where('status', 'aprovado')->where('data', '>=', $inicio)->sum('valor'),
+
+            'pendentes'              => Lancamentos::contarPendentes(),
+            'pedidos_senha'          => SolicitacaoSenha::pendentes()->count(),
+            'solicitacoes_senha'     => SolicitacaoSenha::pendentes()
+                ->orderByDesc('updated_at')
+                ->limit(10)
+                ->get()
+                ->map(fn (SolicitacaoSenha $s) => [
+                    'id'            => $s->id,
+                    'motorista_id'  => $s->motorista_id,
+                    'nome'          => $s->nome,
+                    'cpf'           => $s->cpf,
+                    'atualizado_em' => optional($s->updated_at)->timezone(config('app.timezone'))->format('d/m/Y H:i'),
+                ])
+                ->values(),
+
+            // PAINEL FROTA — cartões: prontos/atenção + abastecimentos de hoje.
+            'frota' => [
+                'prontos'  => Caminhao::where('status', 'ativo')->count(),
+                'atencao'  => Caminhao::whereIn('status', ['manutencao', 'inativo'])->count(),
+                'total'    => Caminhao::count(),
             ],
-            'litros_abastecidos_30_dias' => (float) (clone $abastecimentos)->where('data', '>=', $inicio)->sum('litros'),
-            'abastecimentos_hoje' => (clone $hojeQuery)->count(),
-            'litros_hoje' => (float) (clone $hojeQuery)->sum('litros'),
-            'gasto_manutencao_30_dias' => (float) Manutencao::where('data', '>=', $inicio)->sum('valor'),
-            'tanques' => $tanques,
-            'ultimos_abastecimentos' => $ultimos,
-            // Alertas operacionais vivem no sino (/api/notificacoes), não no painel.
-            'alertas' => [],
+            'abastecimentos_hoje' => [
+                'quantidade' => Abastecimento::where('status', 'aprovado')->whereDate('data', now()->toDateString())->count(),
+                'litros'     => (float) Abastecimento::where('status', 'aprovado')->whereDate('data', now()->toDateString())->sum('litros'),
+            ],
+
+            'tanque_principal'       => $principal,
+            'outros_tanques'         => $outros,
+            'ultimos_abastecimentos' => $ultimosAbastecimentos,
+            'ultimas_notas_fiscais'  => $ultimasNotas,
         ]);
     }
 }

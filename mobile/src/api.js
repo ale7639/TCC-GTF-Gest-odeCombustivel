@@ -66,5 +66,5 @@ function mensagemDeErro(status, json) {
   const erros = json?.errors ? Object.values(json.errors).flat() : [];
   if (erros.length > 0) return erros[0];
 
-  return json?.message || `Erro ${status}`;
+  return json?.message || `Não foi possível concluir a operação (erro ${status}).`;
 }

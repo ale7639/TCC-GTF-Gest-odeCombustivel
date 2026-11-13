@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 // Tela do ADMIN para aprovar ou recusar o que os motoristas lançaram.
 class AprovacaoController extends Controller
 {
-    // GET /api/aprovacoes?status=pendente|aprovado|recusado
+    // GET /api/aprovacoes?status=pendente|aprovado|recusado&pagina=1 — 15 itens por página.
     public function index(Request $request): JsonResponse
     {
         $status = in_array($request->query('status'), ['pendente', 'aprovado', 'recusado'], true)
@@ -29,14 +29,23 @@ class AprovacaoController extends Controller
 
         foreach (Lancamentos::TIPOS as $tipo) {
             Lancamentos::modelo($tipo)::where('status', $status)
-                ->orderByDesc('id')->limit(50)->get()
+                ->orderByDesc('id')->get()
                 ->each(fn ($m) => $itens->push(Lancamentos::apresentar($tipo, $m, $mapas)));
         }
 
+        $ordenados = $itens->sortByDesc('ordem')->values();
+        $porPagina = 15;
+        $paginaNum = max(1, (int) $request->query('pagina', 1));
+        $total     = $ordenados->count();
+        $ultima    = max(1, (int) ceil($total / $porPagina));
+
         return response()->json([
-            'status'    => $status,
-            'pendentes' => Lancamentos::contarPendentes(),
-            'itens'     => $itens->sortByDesc('ordem')->take(60)->values(),
+            'status'        => $status,
+            'pendentes'     => Lancamentos::contarPendentes(),
+            'itens'         => $ordenados->forPage($paginaNum, $porPagina)->values(),
+            'pagina'        => $paginaNum,
+            'ultima_pagina' => $ultima,
+            'total'         => $total,
         ]);
     }
 

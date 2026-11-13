@@ -8,26 +8,50 @@ use App\Models\Tanque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EntradaCombustivelController extends Controller
 {
     // Dados de outras tabelas que acompanham cada entrada na resposta.
-    private const RELACOES = ['tanque:id,nome', 'notaFiscal:id,numero,fornecedor,chave_acesso'];
+    private const RELACOES = ['tanque:id,nome', 'notaFiscal:id,numero,fornecedor,foto'];
 
-    // GET /api/entradas — as 100 mais recentes.
-    public function index(): JsonResponse
+    // GET /api/entradas?dias=0|7|30|90&tanque_id=&pagina=1 — lista paginada (15 por página).
+    public function index(Request $request): JsonResponse
     {
-        $entradas = EntradaCombustivel::with(self::RELACOES)
+        $query = EntradaCombustivel::query();
+
+        $dias = (int) $request->query('dias', 30);
+        if (in_array($dias, [7, 30, 90], true)) {
+            $query->where('data', '>=', now()->subDays($dias)->toDateString());
+        }
+
+        if ($tanqueId = (int) $request->query('tanque_id')) {
+            $query->where('tanque_id', $tanqueId);
+        }
+
+        $pagina = $query->with(self::RELACOES)
             ->orderByDesc('data')
             ->orderByDesc('id')
-            ->limit(100)
-            ->get();
+            ->paginate(15, ['*'], 'pagina', max(1, (int) $request->query('pagina', 1)));
 
-        return response()->json($entradas);
+        $pagina->getCollection()->each(function ($entrada) {
+            if ($entrada->notaFiscal) {
+                $entrada->notaFiscal->setAttribute('foto_url', $entrada->notaFiscal->fotoUrl());
+                $entrada->notaFiscal->makeHidden(['foto', 'chave_acesso']);
+            }
+        });
+
+        return response()->json([
+            'dados'         => $pagina->getCollection()->values(),
+            'pagina'        => $pagina->currentPage(),
+            'ultima_pagina' => $pagina->lastPage(),
+            'total'         => $pagina->total(),
+        ]);
     }
 
-    // POST /api/entradas — registra a chegada de combustível num tanque, com nota fiscal opcional.
+    // POST /api/entradas — registra a chegada de combustível num tanque, com nota fiscal opcional (e foto).
     public function store(Request $request): JsonResponse
     {
         $dados = $request->validate([
@@ -36,27 +60,29 @@ class EntradaCombustivelController extends Controller
             'litros'      => ['required', 'numeric', 'min:1', 'max:99999999'],
             'valor_total' => ['required', 'numeric', 'min:0', 'max:99999999'],
 
-            // Nota fiscal (opcional). Se informar o número, o fornecedor passa a ser obrigatório.
-            'nf_numero'        => ['nullable', 'required_with:nf_chave_acesso', 'string', 'max:20'],
-            'nf_fornecedor'    => ['nullable', 'required_with:nf_numero', 'string', 'max:255'],
-            'nf_chave_acesso'  => ['nullable', 'digits:44', 'unique:notas_fiscais,chave_acesso'],
+            // Nota fiscal (opcional). Número exige fornecedor; foto exige número + fornecedor.
+            'nf_numero'     => ['nullable', 'required_with:foto', 'string', 'max:20'],
+            'nf_fornecedor' => ['nullable', 'required_with:nf_numero', 'string', 'max:255'],
+            'foto'          => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ], [
-            'required'                       => 'Preencha o campo :attribute.',
-            'data.date_format'               => 'Data inválida.',
-            'data.before_or_equal'           => 'A data não pode ser futura.',
-            'litros.min'                     => 'Informe pelo menos 1 litro.',
-            'tanque_id.exists'               => 'Tanque não encontrado.',
-            'nf_numero.required_with'        => 'Informe o número da nota fiscal.',
-            'nf_fornecedor.required_with'    => 'Informe o fornecedor da nota fiscal.',
-            'nf_chave_acesso.digits'         => 'A chave de acesso deve ter 44 números.',
-            'nf_chave_acesso.unique'         => 'Esta nota fiscal já foi cadastrada.',
+            'required'                    => 'Preencha o campo :attribute.',
+            'data.date_format'            => 'Data inválida.',
+            'data.before_or_equal'        => 'A data não pode ser futura.',
+            'litros.min'                  => 'Informe pelo menos 1 litro.',
+            'tanque_id.exists'            => 'Tanque não encontrado.',
+            'nf_numero.required_with'     => 'Informe o número da nota fiscal para anexar a foto.',
+            'nf_fornecedor.required_with' => 'Informe o fornecedor da nota fiscal.',
+            'foto.image'                  => 'O arquivo precisa ser uma imagem.',
+            'foto.max'                    => 'A foto pode ter no máximo 5 MB.',
         ], [
             'tanque_id'   => 'tanque',
             'valor_total' => 'valor total',
+            'nf_numero'   => 'número da nota',
+            'nf_fornecedor' => 'fornecedor',
         ]);
 
         // Tudo ou nada: nota, entrada e nível do tanque são salvos juntos.
-        $entrada = DB::transaction(function () use ($dados) {
+        $entrada = DB::transaction(function () use ($dados, $request) {
             // Trava o tanque até o fim, para dois lançamentos simultâneos não estourarem a capacidade.
             $tanque = Tanque::lockForUpdate()->findOrFail($dados['tanque_id']);
             $litros = (float) $dados['litros'];
@@ -70,12 +96,16 @@ class EntradaCombustivelController extends Controller
 
             $notaId = null;
             if (! empty($dados['nf_numero'])) {
+                $caminhoFoto = $request->hasFile('foto')
+                    ? $request->file('foto')->store('notas-fiscais', 'local')
+                    : null;
+
                 $notaId = NotaFiscal::create([
                     'numero'       => $dados['nf_numero'],
                     'fornecedor'   => $dados['nf_fornecedor'],
                     'data_emissao' => $dados['data'],        // a nota é considerada emitida na data da entrada
                     'valor_total'  => $dados['valor_total'],
-                    'chave_acesso' => $dados['nf_chave_acesso'] ?? null,
+                    'foto'         => $caminhoFoto,
                 ])->id;
             }
 
@@ -100,7 +130,13 @@ class EntradaCombustivelController extends Controller
             return $entrada;
         });
 
-        return response()->json($entrada->load(self::RELACOES), 201);
+        $entrada->load(self::RELACOES);
+        if ($entrada->notaFiscal) {
+            $entrada->notaFiscal->setAttribute('foto_url', $entrada->notaFiscal->fotoUrl());
+            $entrada->notaFiscal->makeHidden(['foto', 'chave_acesso']);
+        }
+
+        return response()->json($entrada, 201);
     }
 
     // DELETE /api/entradas/{id} — corrige um lançamento errado, tirando os litros do tanque.
@@ -130,10 +166,21 @@ class EntradaCombustivelController extends Controller
 
             // A nota só é apagada se não estiver ligada a mais nada.
             if ($nota && ! $nota->entradas()->exists() && ! $nota->manutencoes()->exists()) {
+                if ($nota->foto) {
+                    Storage::disk('local')->delete($nota->foto);
+                }
                 $nota->delete();
             }
         });
 
         return response()->json(['message' => 'Entrada excluída e litros retirados do tanque.']);
+    }
+
+    // GET /api/fotos/notas-fiscais/{nota}?signature=... — rota pública, só com endereço assinado.
+    public function foto(NotaFiscal $nota): BinaryFileResponse
+    {
+        abort_unless($nota->foto && Storage::disk('local')->exists($nota->foto), 404);
+
+        return response()->file(Storage::disk('local')->path($nota->foto));
     }
 }

@@ -59,7 +59,7 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
   const conteudo = (
     <>
       <View style={styles.topo}>
-        <Text style={styles.marca}>GESTÃO DE FROTA</Text>
+        <Text style={styles.marca}>Gestão de frota</Text>
         {usuario && (
           <>
             <Text style={styles.usuario}>{usuario.nome}</Text>
@@ -89,9 +89,9 @@ export default function MenuLateral({ navegacao, rotaAtual }) {
               <MaterialCommunityIcons
                 name={item.icone}
                 size={22}
-                color={ativo ? '#2563eb' : '#374151'}
+                color={ativo ? '#dc2626' : '#374151'}
               />
-              <Text style={[styles.itemTexto, ativo && { color: '#2563eb' }]}>{item.rotulo}</Text>
+              <Text style={[styles.itemTexto, ativo && { color: '#dc2626' }]}>{item.rotulo}</Text>
             </Pressable>
           );
         })}
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topo: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  marca: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+  marca: { fontSize: 18, fontWeight: '800', color: '#dc2626' },
   usuario: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 10 },
   email: { fontSize: 13, color: '#6b7280', marginTop: 2 },
   itens: { flex: 1, paddingTop: 8 },
@@ -161,6 +161,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 20,
+    minHeight: 48,
   },
   secao: {
     fontSize: 12,
@@ -171,7 +172,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 2,
   },
-  itemAtivo: { backgroundColor: '#eff6ff' },
+  itemAtivo: { backgroundColor: '#fee2e2' },
   itemTexto: { fontSize: 16, fontWeight: '500', color: '#374151' },
   sair: {
     flexDirection: 'row',
@@ -179,6 +180,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 20,
+    minHeight: 48,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },

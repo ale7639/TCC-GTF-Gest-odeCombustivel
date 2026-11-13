@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
-import { useAuth } from '../auth/AuthContext';
+import Cabecalho from '../components/Cabecalho';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 
 // ---------- Funções de formatação ----------
@@ -75,7 +75,7 @@ function Formulario({ titulo, visivel, aoFechar, aoEnviar, enviando, erro, aprov
   return (
     <Modal visible={visivel} animationType="slide" onRequestClose={aoFechar}>
       <ScrollView style={styles.modal} contentContainerStyle={styles.formConteudo} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titulo}>{titulo}</Text>
+        <Cabecalho titulo={titulo} aoVoltar={aoFechar} sangrar />
         {aprovacao && (
           <Text style={styles.aviso}>O abastecimento só vale depois que o administrador aprovar.</Text>
         )}
@@ -319,9 +319,8 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
   );
 }
 
-// ---------- Tela principal do motorista ----------
+// ---------- Tela principal do motorista (Início) ----------
 export default function AreaMotorista() {
-  const { sair } = useAuth();
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [atualizando, setAtualizando] = useState(false);
@@ -351,102 +350,100 @@ export default function AreaMotorista() {
 
   const caminhao = dados?.caminhao;
   const pronto = caminhao && caminhao.status === 'ativo';
-
-  const cabecalho = dados && (
-    <View>
-      <View style={styles.caixaCaminhao}>
-        {caminhao ? (
-          <>
-            <Text style={styles.placa}>{caminhao.placa}</Text>
-            <Text style={styles.detalhe}>{caminhao.modelo}</Text>
-            <Text style={styles.detalhe}>
-              {numero(caminhao.km_atual)} km · tanque de {numero(caminhao.capacidade_tanque)} L
-            </Text>
-            {!pronto && <Text style={styles.erroForm}>Seu caminhão não está ativo no momento.</Text>}
-          </>
-        ) : (
-          <Text style={styles.aviso}>Você ainda não tem um caminhão vinculado. Fale com o administrador.</Text>
-        )}
-      </View>
-
-      {pronto && (
-        <View style={styles.acoes}>
-          {[
-            ['abastecimento', 'Abastecimento'],
-            ['lavagem', 'Lavagem'],
-            ['manutencao', 'Manutenção'],
-          ].map(([chave, rotulo]) => (
-            <Pressable
-              key={chave}
-              style={styles.acao}
-              onPress={() => {
-                setAviso(null);
-                setFormAberto(chave);
-              }}
-            >
-              <Text style={styles.acaoTexto}>+ {rotulo}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      {aviso && <Text style={styles.sucesso}>{aviso}</Text>}
-      <Text style={styles.secao}>Meus lançamentos</Text>
-    </View>
-  );
+  const recentes = (dados?.historico ?? []).slice(0, 5);
 
   return (
     <View style={styles.tela}>
-      <View style={styles.topo}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.titulo}>Olá, {dados?.motorista?.nome?.split(' ')[0] ?? ''}</Text>
-          <Text style={styles.detalhe}>Área do motorista</Text>
-        </View>
-        <Pressable onPress={sair}>
-          <Text style={styles.sair}>Sair</Text>
-        </Pressable>
+      <Cabecalho titulo="Início" />
+
+      <View style={styles.corpo}>
+        {erro && <Text style={styles.erroTela}>{erro}</Text>}
+        {!dados && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+        {dados && (
+          <FlatList
+            data={recentes}
+            keyExtractor={(item) => `${item.tipo}-${item.id}`}
+            ListHeaderComponent={
+              <>
+                <Text style={styles.saudacao}>Olá, {dados?.motorista?.nome?.split(' ')[0] ?? ''}</Text>
+                <Text style={styles.saudacaoSub}>Seu caminhão e lançamentos recentes</Text>
+
+                <View style={styles.caixaCaminhao}>
+                  {caminhao ? (
+                    <>
+                      <Text style={styles.placa}>{caminhao.placa}</Text>
+                      <Text style={styles.detalhe}>{caminhao.modelo}</Text>
+                      <Text style={styles.detalhe}>
+                        {numero(caminhao.km_atual)} km · tanque de {numero(caminhao.capacidade_tanque)} L
+                      </Text>
+                      {!pronto && <Text style={styles.erroForm}>Seu caminhão não está ativo no momento.</Text>}
+                    </>
+                  ) : (
+                    <Text style={styles.aviso}>
+                      Você ainda não tem um caminhão vinculado. Fale com o administrador.
+                    </Text>
+                  )}
+                </View>
+
+                {pronto && (
+                  <View style={styles.acoes}>
+                    {[
+                      ['abastecimento', 'Abastecimento'],
+                      ['lavagem', 'Lavagem'],
+                      ['manutencao', 'Manutenção'],
+                    ].map(([chave, rotulo]) => (
+                      <Pressable
+                        key={chave}
+                        style={styles.acao}
+                        onPress={() => {
+                          setAviso(null);
+                          setFormAberto(chave);
+                        }}
+                      >
+                        <Text style={styles.acaoTexto}>+ {rotulo}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {aviso && <Text style={styles.sucesso}>{aviso}</Text>}
+                <Text style={styles.secao}>Recentes</Text>
+              </>
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={atualizando}
+                onRefresh={() => {
+                  setAtualizando(true);
+                  carregar();
+                }}
+              />
+            }
+            ListEmptyComponent={<Text style={styles.vazio}>Você ainda não fez nenhum lançamento.</Text>}
+            contentContainerStyle={{ paddingBottom: 32 }}
+            renderItem={({ item }) => (
+              <View style={styles.caixa}>
+                <View style={styles.linhaTopo}>
+                  <Text style={styles.itemTitulo}>{item.titulo}</Text>
+                </View>
+                <Text style={styles.detalhe}>{item.data_br}</Text>
+                {item.linhas.map((l, i) => (
+                  <Text key={i} style={styles.detalhe}>
+                    {l}
+                  </Text>
+                ))}
+                <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                  <EtiquetaStatus status={item.status} />
+                </View>
+                {item.status === 'recusado' && item.motivo_recusa && (
+                  <Text style={styles.motivo}>Motivo: {item.motivo_recusa}</Text>
+                )}
+              </View>
+            )}
+          />
+        )}
       </View>
-
-      {erro && <Text style={styles.erroTela}>{erro}</Text>}
-      {!dados && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
-
-      {dados && (
-        <FlatList
-          data={dados.historico}
-          keyExtractor={(item) => `${item.tipo}-${item.id}`}
-          ListHeaderComponent={cabecalho}
-          refreshControl={
-            <RefreshControl
-              refreshing={atualizando}
-              onRefresh={() => {
-                setAtualizando(true);
-                carregar();
-              }}
-            />
-          }
-          ListEmptyComponent={<Text style={styles.vazio}>Você ainda não fez nenhum lançamento.</Text>}
-          contentContainerStyle={{ paddingBottom: 32 }}
-          renderItem={({ item }) => (
-            <View style={styles.caixa}>
-              <View style={styles.linhaTopo}>
-                <Text style={styles.itemTitulo}>{item.titulo}</Text>
-              </View>
-              <Text style={styles.detalhe}>{item.data_br}</Text>
-              {item.linhas.map((l, i) => (
-                <Text key={i} style={styles.detalhe}>
-                  {l}
-                </Text>
-              ))}
-              <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-                <EtiquetaStatus status={item.status} />
-              </View>
-              {item.status === 'recusado' && item.motivo_recusa && (
-                <Text style={styles.motivo}>Motivo: {item.motivo_recusa}</Text>
-              )}
-            </View>
-          )}
-        />
-      )}
 
       {formAberto === 'abastecimento' && (
         <FormAbastecimento caminhao={caminhao} aoFechar={() => setFormAberto(null)} aoEnviado={aoEnviado} />
@@ -460,29 +457,35 @@ export default function AreaMotorista() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  topo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  sair: { fontSize: 16, fontWeight: '600', color: '#dc2626' },
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  saudacao: { fontSize: 22, fontWeight: '700', color: '#1f2937' },
+  saudacaoSub: { fontSize: 13, color: '#6b7280', marginBottom: 14, marginTop: 4 },
   erroTela: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  caixaCaminhao: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12 },
-  placa: { fontSize: 26, fontWeight: 'bold', color: '#111827' },
+  caixaCaminhao: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12 },
+  placa: { fontSize: 26, fontWeight: '700', color: '#1f2937' },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 3 },
   acoes: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  acao: { flex: 1, backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  acaoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  acao: { flex: 1, backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  acaoTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
   sucesso: { color: '#16a34a', fontWeight: '600', marginBottom: 8 },
   secao: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 8, marginTop: 4 },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 30 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
   linhaTopo: { flexDirection: 'row', justifyContent: 'space-between' },
-  itemTitulo: { fontSize: 16, fontWeight: 'bold', color: '#111827', flexShrink: 1 },
-  etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
+  itemTitulo: { fontSize: 16, fontWeight: '700', color: '#1f2937', flexShrink: 1 },
+  etiqueta: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
   motivo: { fontSize: 13, color: '#dc2626', marginTop: 6 },
 
-  modal: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  modal: { flex: 1, backgroundColor: '#f3f4f6' },
+  formConteudo: {
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
   aviso: { fontSize: 13, color: '#6b7280', marginBottom: 12 },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
@@ -503,10 +506,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12, marginTop: 6 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },

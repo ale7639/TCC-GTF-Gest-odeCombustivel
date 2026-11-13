@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { armazenamento } from '../storage';
 import { api, definirAoExpirar } from '../api';
 
-// O contexto deixa qualquer tela saber quem está logado, sem passar dados de tela em tela.
+// AUTH — sessão (token + usuário) compartilhada entre as telas.
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -34,11 +34,11 @@ export function AuthProvider({ children }) {
     definirAoExpirar(limparSessao);
   }, []);
 
-  // Envia e-mail e senha; se estiverem certos, guarda o token.
-  const entrar = async (email, senha) => {
+  // AUTH ENTRAR — login = CPF (motorista) ou e-mail (admin).
+  const entrar = async (login, senha) => {
     const dados = await api('/login', {
       metodo: 'POST',
-      corpo: { email, password: senha },
+      corpo: { login, password: senha },
     });
     await armazenamento.gravar('token', dados.token);
     await armazenamento.gravar('usuario', JSON.stringify(dados.usuario));
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
     setUsuario(dados.usuario);
   };
 
-  // Avisa o servidor (para apagar o token lá) e limpa a sessão no aparelho.
+  // AUTH SAIR — avisa a API e limpa a sessão no aparelho.
   const sair = async () => {
     try {
       await api('/logout', { metodo: 'POST' });
@@ -56,8 +56,14 @@ export function AuthProvider({ children }) {
     await limparSessao();
   };
 
+  const atualizarUsuario = async (parcial) => {
+    const novo = { ...usuario, ...parcial };
+    await armazenamento.gravar('usuario', JSON.stringify(novo));
+    setUsuario(novo);
+  };
+
   return (
-    <AuthContext.Provider value={{ token, usuario, carregando, entrar, sair }}>
+    <AuthContext.Provider value={{ token, usuario, carregando, entrar, sair, atualizarUsuario }}>
       {children}
     </AuthContext.Provider>
   );

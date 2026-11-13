@@ -3,331 +3,211 @@
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
-use App\Models\AuditLog;
 use App\Models\Caminhao;
-use App\Models\EntradaCombustivel;
 use App\Models\Lavagem;
 use App\Models\Manutencao;
 use App\Models\Motorista;
 use App\Models\NotaFiscal;
-use App\Support\Consumo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RelatorioController extends Controller
 {
-    public function consumo(Request $request): JsonResponse
+    // RELATORIO — consumo, ranking, históricos e exportação CSV.
+
+    // RELATORIO ABASTECIMENTOS — consumo por caminhão e litros por tanque (dias=0 = tudo).
+    public function abastecimentos(Request $request): JsonResponse
     {
-        [$de, $ate] = $this->periodo($request);
-        $query = Abastecimento::with(['caminhao:id,placa,modelo,meta_km_l', 'motorista:id,nome'])
-            ->whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate);
+        $dias = $this->dias($request);
+        $abastecimentos = $this->abastecimentosPeriodo($dias);
 
-        if ($caminhaoId = $request->integer('caminhao_id')) {
-            $query->where('caminhao_id', $caminhaoId);
-        }
+        // Por caminhão: litros, quilômetros rodados e consumo médio no período.
+        $porCaminhao = $abastecimentos->groupBy('caminhao_id')->map(function ($itens) {
+            $primeiro  = $itens->first();
+            $litros    = (float) $itens->sum('litros');
+            $kmRodados = $itens->max('km') - $itens->min('km');
 
-        $lista = $query->orderBy('data')->get();
-        $dias = $lista->groupBy(fn ($a) => $a->data->toDateString())
-            ->map(fn ($grupo, $dia) => [
-                'data' => $dia,
-                'litros' => round((float) $grupo->sum('litros'), 2),
-                'quantidade' => $grupo->count(),
-            ])
-            ->values();
-
-        $anomalias = [];
-        $ranking = $lista->groupBy('caminhao_id')->map(function ($grupo) use (&$anomalias) {
-            $caminhao = $grupo->first()->caminhao;
-            $media = $caminhao ? Consumo::mediaCaminhao($caminhao) : null;
-            $meta = $caminhao?->meta_km_l !== null ? (float) $caminhao->meta_km_l : null;
-            $desvioMeta = ($media !== null && $meta) ? round($media - $meta, 2) : null;
-
-            $trechos = $caminhao
-                ? Consumo::trechos($caminhao->abastecimentos()->orderBy('km')->orderBy('data')->orderBy('id')->get())
-                : collect();
-            $ultimo = $trechos->last();
-            $anomalo = $media && $ultimo && $ultimo['km_l'] < ($media * 0.75);
-            if ($anomalo && $caminhao) {
-                $anomalias[] = [
-                    'caminhao_id' => $caminhao->id,
-                    'placa' => $caminhao->placa,
-                    'ultimo_km_l' => $ultimo['km_l'],
-                    'media_km_l' => $media,
-                ];
-            }
+            // O primeiro abastecimento só repõe o que foi gasto ANTES do período,
+            // então não entra na conta do consumo (por isso são precisos pelo menos dois).
+            $litrosDoConsumo = $litros - (float) $primeiro->litros;
 
             return [
-                'caminhao_id' => $grupo->first()->caminhao_id,
-                'placa' => $caminhao?->placa,
-                'modelo' => $caminhao?->modelo,
-                'litros' => round((float) $grupo->sum('litros'), 2),
-                'quantidade' => $grupo->count(),
-                'media_km_l' => $media,
-                'meta_km_l' => $meta,
-                'desvio_meta' => $desvioMeta,
-                'consumo_anomalo' => $anomalo,
+                'caminhao_id'    => $primeiro->caminhao_id,
+                'placa'          => $primeiro->caminhao->placa,
+                'modelo'         => $primeiro->caminhao->modelo,
+                'abastecimentos' => $itens->count(),
+                'litros'         => round($litros, 2),
+                'km_rodados'     => $kmRodados,
+                'consumo_km_l'   => ($itens->count() > 1 && $litrosDoConsumo > 0 && $kmRodados > 0)
+                    ? round($kmRodados / $litrosDoConsumo, 2)
+                    : null,
             ];
         })->sortByDesc('litros')->values();
 
-        $totalLitros = (float) $lista->sum('litros');
-        $nDias = max(1, (int) (new \DateTime($de))->diff(new \DateTime($ate))->days + 1);
+        // Por tanque: quanto saiu de cada um.
+        $porTanque = $abastecimentos->whereNotNull('tanque_id')->groupBy('tanque_id')->map(fn ($itens) => [
+            'tanque_id'      => $itens->first()->tanque_id,
+            'nome'           => $itens->first()->tanque->nome,
+            'abastecimentos' => $itens->count(),
+            'litros'         => round((float) $itens->sum('litros'), 2),
+        ])->sortByDesc('litros')->values();
+
+        $mediaFrota = $porCaminhao->whereNotNull('consumo_km_l')->avg('consumo_km_l');
+        $totalLitros = round((float) $abastecimentos->sum('litros'), 2);
+
+        // Litros por dia (para o gráfico de barras do Relatórios).
+        $porDia = $abastecimentos
+            ->groupBy(fn ($a) => substr((string) $a->data, 0, 10))
+            ->map(fn ($itens, $dia) => [
+                'dia'    => $dia,
+                'litros' => round((float) $itens->sum('litros'), 2),
+                'qtd'    => $itens->count(),
+            ])
+            ->sortKeys()
+            ->values();
+
+        $diasComDados = max(1, $porDia->count());
+        $mediaDiaria = round($totalLitros / $diasComDados, 1);
 
         return response()->json([
-            'de' => $de,
-            'ate' => $ate,
-            'total_litros' => round($totalLitros, 2),
-            'media_diaria' => round($totalLitros / $nDias, 2),
-            'quantidade' => $lista->count(),
-            'serie' => $dias,
-            'ranking' => $ranking,
-            'anomalias' => $anomalias,
-        ]);
-    }
-
-    public function rankingMotoristas(Request $request): JsonResponse
-    {
-        [$de, $ate] = $this->periodo($request);
-        $lista = Abastecimento::with('motorista:id,nome')
-            ->whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->whereNotNull('motorista_id')
-            ->get();
-
-        $ranking = $lista->groupBy('motorista_id')->map(function ($grupo) {
-            $motorista = $grupo->first()->motorista;
-            $porCaminhao = $grupo->groupBy('caminhao_id');
-            $medias = [];
-            foreach ($porCaminhao as $caminhaoId => $abs) {
-                $caminhao = Caminhao::find($caminhaoId);
-                if ($caminhao) {
-                    $m = Consumo::mediaCaminhao($caminhao);
-                    if ($m !== null) {
-                        $medias[] = $m;
-                    }
-                }
-            }
-
-            return [
-                'motorista_id' => $grupo->first()->motorista_id,
-                'nome' => $motorista?->nome,
-                'litros' => round((float) $grupo->sum('litros'), 2),
-                'quantidade' => $grupo->count(),
-                'media_km_l' => $medias ? round(array_sum($medias) / count($medias), 2) : null,
-            ];
-        })->sortByDesc(fn ($r) => $r['media_km_l'] ?? 0)->values();
-
-        return response()->json([
-            'de' => $de,
-            'ate' => $ate,
-            'ranking' => $ranking,
-        ]);
-    }
-
-    public function cpk(Request $request): JsonResponse
-    {
-        [$de, $ate] = $this->periodo($request);
-
-        $precoMedio = $this->precoMedioLitro($de, $ate);
-        $abastecimentos = Abastecimento::with('caminhao:id,placa,modelo')
-            ->whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->get();
-
-        $custoCombustivel = round((float) $abastecimentos->sum('litros') * $precoMedio, 2);
-        $custoManutencao = (float) Manutencao::whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->sum('valor');
-        $custoLavagem = (float) Lavagem::whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->sum('valor');
-        $custoTotal = round($custoCombustivel + $custoManutencao + $custoLavagem, 2);
-
-        $porCaminhao = [];
-        foreach (Caminhao::where('status', '!=', 'inativo')->orderBy('placa')->get() as $c) {
-            $abs = $abastecimentos->where('caminhao_id', $c->id)->sortBy('km');
-            $kmPeriodo = 0;
-            if ($abs->count() >= 2) {
-                $kmPeriodo = max(0, (int) $abs->last()->km - (int) $abs->first()->km);
-            } elseif ($abs->count() === 1) {
-                $kmPeriodo = max(0, (int) $c->km_atual - (int) $abs->first()->km);
-            }
-
-            $litros = (float) $abs->sum('litros');
-            $manut = (float) Manutencao::where('caminhao_id', $c->id)
-                ->whereDate('data', '>=', $de)->whereDate('data', '<=', $ate)->sum('valor');
-            $lav = (float) Lavagem::where('caminhao_id', $c->id)
-                ->whereDate('data', '>=', $de)->whereDate('data', '<=', $ate)->sum('valor');
-            $custo = round(($litros * $precoMedio) + $manut + $lav, 2);
-
-            $porCaminhao[] = [
-                'caminhao_id' => $c->id,
-                'placa' => $c->placa,
-                'modelo' => $c->modelo,
-                'km_periodo' => $kmPeriodo,
-                'litros' => round($litros, 2),
-                'custo_combustivel' => round($litros * $precoMedio, 2),
-                'custo_manutencao' => round($manut, 2),
-                'custo_lavagem' => round($lav, 2),
-                'custo_total' => $custo,
-                'cpk' => $kmPeriodo > 0 ? round($custo / $kmPeriodo, 4) : null,
-            ];
-        }
-
-        $kmTotal = array_sum(array_column($porCaminhao, 'km_periodo'));
-
-        return response()->json([
-            'de' => $de,
-            'ate' => $ate,
-            'preco_medio_litro' => $precoMedio,
-            'custo_combustivel' => $custoCombustivel,
-            'custo_manutencao' => round($custoManutencao, 2),
-            'custo_lavagem' => round($custoLavagem, 2),
-            'custo_total' => $custoTotal,
-            'km_total' => $kmTotal,
-            'cpk' => $kmTotal > 0 ? round($custoTotal / $kmTotal, 4) : null,
+            'dias' => $dias,
+            'resumo' => [
+                'total_litros'        => $totalLitros,
+                'abastecimentos'      => $abastecimentos->count(),
+                'caminhoes_atendidos' => $porCaminhao->count(),
+                'consumo_medio_km_l'  => $mediaFrota !== null ? round($mediaFrota, 2) : null,
+                'media_diaria'        => $mediaDiaria,
+            ],
+            'por_dia'      => $porDia,
             'por_caminhao' => $porCaminhao,
+            'por_tanque'   => $porTanque,
         ]);
     }
 
-    public function disponibilidade(Request $request): JsonResponse
+    // RELATORIO EXPORTAR — CSV do relatório de combustível.
+    public function exportarAbastecimentos(Request $request): StreamedResponse
     {
-        [$de, $ate] = $this->periodo($request);
-        $diasMes = max(1, (int) (new \DateTime($de))->diff(new \DateTime($ate))->days + 1);
+        $dias = $this->dias($request);
+        $abastecimentos = $this->abastecimentosPeriodo($dias);
 
-        $itens = Caminhao::where('status', '!=', 'inativo')->orderBy('placa')->get()->map(function (Caminhao $c) use ($de, $ate, $diasMes) {
-            // MVP: dias em manutenção = dias com OS aberta/em andamento sobrepondo o mês,
-            // ou status atual manutencao conta o mês inteiro se não houver datas.
-            $os = Manutencao::where('caminhao_id', $c->id)
-                ->whereIn('status', ['aberto', 'em_andamento', 'agendada'])
-                ->where(function ($q) use ($de, $ate) {
-                    $q->whereBetween('data_prevista', [$de, $ate])
-                        ->orWhereBetween('data', [$de, $ate]);
-                })
-                ->get();
+        $linhas = [
+            ['Data', 'Placa', 'Modelo', 'Motorista', 'Tanque', 'Origem', 'Posto', 'Litros', 'Km', 'Valor (R$)', 'Status'],
+        ];
 
-            $diasManut = min($diasMes, $os->count() > 0 ? $os->count() : ($c->status === 'manutencao' ? $diasMes : 0));
-            $diasAtivo = max(0, $diasMes - $diasManut);
-            $pct = round(($diasAtivo / $diasMes) * 100, 1);
-
-            return [
-                'caminhao_id' => $c->id,
-                'placa' => $c->placa,
-                'modelo' => $c->modelo,
-                'status' => $c->status,
-                'dias_mes' => $diasMes,
-                'dias_ativo' => $diasAtivo,
-                'dias_manutencao' => $diasManut,
-                'disponibilidade_pct' => $pct,
+        foreach ($abastecimentos as $a) {
+            $linhas[] = [
+                Carbon::parse($a->data)->format('d/m/Y'),
+                $a->caminhao?->placa ?? '',
+                $a->caminhao?->modelo ?? '',
+                $a->motorista?->nome ?? '',
+                $a->tanque?->nome ?? '',
+                $a->origem === 'externo' ? 'Posto' : 'Base',
+                $a->posto ?? '',
+                number_format((float) $a->litros, 2, ',', '.'),
+                (string) $a->km,
+                number_format((float) ($a->valor_total ?? $a->custo_total ?? 0), 2, ',', '.'),
+                $a->status,
             ];
-        });
-
-        $media = $itens->count() ? round($itens->avg('disponibilidade_pct'), 1) : null;
-
-        return response()->json([
-            'de' => $de,
-            'ate' => $ate,
-            'media_frota_pct' => $media,
-            'caminhoes' => $itens->values(),
-        ]);
-    }
-
-    public function abastecimentos(Request $request): JsonResponse
-    {
-        [$de, $ate] = $this->periodo($request);
-        $query = Abastecimento::with([
-            'caminhao:id,placa',
-            'motorista:id,nome',
-            'tanque:id,nome',
-            'usuario:id,name',
-        ])
-            ->whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->orderByDesc('data')
-            ->orderByDesc('id');
-
-        if ($origem = $request->string('origem')->toString()) {
-            $query->where('origem', $origem);
-        }
-        if ($caminhaoId = $request->integer('caminhao_id')) {
-            $query->where('caminhao_id', $caminhaoId);
         }
 
-        return response()->json($query->limit(300)->get());
+        return $this->csv('relatorio-abastecimentos.csv', $linhas);
     }
 
-    public function quilometragem(): JsonResponse
+    // RELATORIO EXPORTAR_NF — CSV de NFs + gastos do período.
+    public function exportarNotasFiscais(Request $request): StreamedResponse
     {
-        $caminhoes = Caminhao::with('motorista:id,nome')
-            ->orderBy('placa')
-            ->get()
-            ->map(function (Caminhao $c) {
-                $ultimo = $c->abastecimentos()->orderByDesc('km')->orderByDesc('id')->first();
-                $media = $c->media_km_l;
-                $meta = $c->meta_km_l !== null ? (float) $c->meta_km_l : null;
+        $dias   = $this->dias($request);
+        $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
+        $origem = in_array($request->query('origem'), ['compra', 'posto'], true) ? $request->query('origem') : 'todas';
+        $busca  = trim((string) $request->query('busca', ''));
+        $fornecedorFiltro = trim((string) $request->query('fornecedor', ''));
 
-                return [
-                    'id' => $c->id,
-                    'placa' => $c->placa,
-                    'modelo' => $c->modelo,
-                    'km_atual' => $c->km_atual,
-                    'status' => $c->status,
-                    'motorista' => $c->motorista?->nome,
-                    'media_km_l' => $media,
-                    'meta_km_l' => $meta,
-                    'desvio_meta' => ($media !== null && $meta) ? round($media - $meta, 2) : null,
-                    'ultimo_abastecimento_km' => $ultimo?->km,
-                    'ultimo_abastecimento_data' => $ultimo?->data?->toDateString(),
-                ];
-            });
+        $notas  = collect();
+        $placas = Caminhao::pluck('placa', 'id');
 
-        return response()->json($caminhoes);
-    }
+        if ($origem !== 'posto') {
+            NotaFiscal::with(['entradas.tanque:id,nome', 'manutencoes:id,nota_fiscal_id,tipo'])
+                ->when($inicio, fn ($q) => $q->where('data_emissao', '>=', $inicio))
+                ->when($fornecedorFiltro !== '', fn ($q) => $q->where('fornecedor', $fornecedorFiltro))
+                ->when($busca !== '', fn ($q) => $q->where(fn ($q) => $q
+                    ->where('numero', 'like', "%{$busca}%")->orWhere('fornecedor', 'like', "%{$busca}%")))
+                ->orderByDesc('data_emissao')
+                ->get()
+                ->each(function ($n) use ($notas, $placas) {
+                    $entrada    = $n->entradas->first();
+                    $manutencao = $n->manutencoes->first();
+                    $placa      = $n->caminhao_id ? ($placas[$n->caminhao_id] ?? null) : null;
 
-    public function auditoria(Request $request): JsonResponse
-    {
-        $query = AuditLog::with('user:id,name,email,role')
-            ->orderByDesc('id');
+                    if ($entrada) {
+                        $categoria = 'Combustível';
+                        $descricao = 'Combustível · ' . ($entrada->tanque?->nome ?? 'tanque');
+                    } elseif ($manutencao) {
+                        $categoria = 'Manutenção';
+                        $descricao = 'Manutenção · ' . $manutencao->tipo . ($placa ? ' · ' . $placa : '');
+                    } else {
+                        $categoria = $n->categoria ?: 'Outros';
+                        $descricao = implode(' · ', array_filter([$categoria, $n->descricao, $placa]));
+                    }
 
-        if ($acao = $request->string('action')->toString()) {
-            $query->where('action', 'like', $acao.'%');
+                    $notas->push([
+                        Carbon::parse($n->data_emissao)->format('d/m/Y'),
+                        $n->numero,
+                        $n->fornecedor,
+                        'Empresa',
+                        $categoria,
+                        $descricao,
+                        number_format((float) $n->valor_total, 2, ',', '.'),
+                    ]);
+                });
         }
 
-        return response()->json($query->limit(200)->get());
+        if ($origem !== 'compra') {
+            Abastecimento::with('caminhao:id,placa')
+                ->where('status', 'aprovado')->where('origem', 'externo')
+                ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
+                ->when($fornecedorFiltro !== '', fn ($q) => $q->where('posto', $fornecedorFiltro))
+                ->when($busca !== '', fn ($q) => $q->where(fn ($q) => $q
+                    ->where('nota_numero', 'like', "%{$busca}%")->orWhere('posto', 'like', "%{$busca}%")))
+                ->orderByDesc('data')
+                ->get()
+                ->each(function ($a) use ($notas) {
+                    $notas->push([
+                        Carbon::parse($a->data)->format('d/m/Y'),
+                        $a->nota_numero ?: 'sem número',
+                        $a->posto ?: 'Posto não informado',
+                        'Posto',
+                        'Combustível (posto)',
+                        'Abastecimento fora da base · ' . ($a->caminhao?->placa ?? ''),
+                        number_format((float) $a->valor_total, 2, ',', '.'),
+                    ]);
+                });
+        }
+
+        $linhas = array_merge(
+            [['Data', 'Número', 'Fornecedor/Posto', 'Origem', 'Categoria', 'Descrição', 'Valor (R$)']],
+            $notas->all()
+        );
+
+        return $this->csv('relatorio-notas-fiscais.csv', $linhas);
     }
 
-    public function notas(Request $request): JsonResponse
-    {
-        $notas = NotaFiscal::with(['entradas.tanque:id,nome,tipo_combustivel'])
-            ->orderByDesc('data_emissao')
-            ->orderByDesc('id')
-            ->limit((int) $request->integer('limit') ?: 30)
-            ->get();
-
-        return response()->json($notas);
-    }
-
-    /** GET /api/relatorios/motoristas — relatório Wallace (mobile). */
+    // RELATORIO MOTORISTAS — abastecimentos, litros, km, consumo, lavagens e manutenções.
     public function motoristas(Request $request): JsonResponse
     {
-        $dias = (int) $request->query('dias', 30);
-        if (! in_array($dias, [0, 7, 30, 90], true)) {
-            $dias = 30;
-        }
+        $dias = $this->dias($request);
         $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
 
-        $abastecimentos = Abastecimento::query()
-            ->when(
-                Schema::hasColumn('abastecimentos', 'status'),
-                fn ($q) => $q->where('status', 'aprovado')
-            )
+        $abastecimentos = Abastecimento::where('status', 'aprovado')
             ->with('caminhao:id,placa')
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
             ->orderBy('data')->orderBy('id')
             ->get()
             ->groupBy('motorista_id');
 
+        // Lavagens: só filtra por data se a coluna "data" existir na tabela.
         $filtraLavagem = $inicio && Schema::hasColumn('lavagens', 'data');
         $lavagens = Lavagem::query()
             ->when(Schema::hasColumn('lavagens', 'status'), fn ($q) => $q->where('status', 'aprovado'))
@@ -342,6 +222,8 @@ class RelatorioController extends Controller
         $lista = Motorista::orderBy('nome')->get()->map(function ($motorista) use ($abastecimentos, $lavagens, $manutencoes) {
             $itens = $abastecimentos->get($motorista->id, collect());
 
+            // Consumo: para cada caminhão que ele dirigiu, km rodados entre o primeiro e o último
+            // abastecimento ÷ litros (sem contar o primeiro, que repõe o que foi gasto antes do período).
             $km = 0;
             $litrosConsumo = 0.0;
             foreach ($itens->groupBy('caminhao_id') as $doCaminhao) {
@@ -355,60 +237,263 @@ class RelatorioController extends Controller
             $manut = $manutencoes->get($motorista->id, collect());
 
             return [
-                'motorista_id' => $motorista->id,
-                'nome' => $motorista->nome,
-                'placas' => $itens->pluck('caminhao.placa')->unique()->values(),
+                'motorista_id'   => $motorista->id,
+                'nome'           => $motorista->nome,
+                'placas'         => $itens->pluck('caminhao.placa')->unique()->values(),
                 'abastecimentos' => $itens->count(),
-                'litros' => round((float) $itens->sum('litros'), 2),
-                'km_rodados' => $km,
-                'consumo_km_l' => ($litrosConsumo > 0 && $km > 0) ? round($km / $litrosConsumo, 2) : null,
-                'lavagens' => $lavagens->get($motorista->id, collect())->count(),
-                'manutencoes' => $manut->count(),
+                'litros'         => round((float) $itens->sum('litros'), 2),
+                'km_rodados'     => $km,
+                'consumo_km_l'   => ($litrosConsumo > 0 && $km > 0) ? round($km / $litrosConsumo, 2) : null,
+                'lavagens'       => $lavagens->get($motorista->id, collect())->count(),
+                'manutencoes'    => $manut->count(),
                 'gasto_manutencao' => round((float) $manut->sum('valor'), 2),
             ];
         });
 
+        // Quem tem atividade vem primeiro (mais litros no topo); os sem atividade ficam no fim.
         $lista = $lista->sortByDesc(fn ($m) => [$m['litros'], $m['lavagens'] + $m['manutencoes']])->values();
 
         return response()->json([
-            'dias' => $dias,
-            'resumo' => [
-                'motoristas' => $lista->count(),
-                'com_atividade' => $lista->filter(fn ($m) => $m['abastecimentos'] + $m['lavagens'] + $m['manutencoes'] > 0)->count(),
-                'total_litros' => round((float) $lista->sum('litros'), 2),
+            'dias'      => $dias,
+            'resumo'    => [
+                'motoristas'     => $lista->count(),
+                'com_atividade'  => $lista->filter(fn ($m) => $m['abastecimentos'] + $m['lavagens'] + $m['manutencoes'] > 0)->count(),
+                'total_litros'   => round((float) $lista->sum('litros'), 2),
             ],
             'motoristas' => $lista,
         ]);
     }
 
-    private function periodo(Request $request): array
+    // RELATORIO HISTORICO_MOTORISTA — ações do motorista no período.
+    public function motoristaHistorico(Request $request, Motorista $motorista): JsonResponse
     {
-        $mes = (int) ($request->integer('mes') ?: now()->month);
-        $ano = (int) ($request->integer('ano') ?: now()->year);
-        $de = $request->string('de')->toString() ?: sprintf('%04d-%02d-01', $ano, $mes);
-        $ate = $request->string('ate')->toString() ?: date('Y-m-t', strtotime($de));
+        $dias = $this->dias($request);
+        $acoes = $this->acoesMotorista($motorista->id, $dias);
 
-        return [$de, $ate];
+        return response()->json([
+            'dias' => $dias,
+            'motorista' => [
+                'id'   => $motorista->id,
+                'nome' => $motorista->nome,
+                'cpf'  => $motorista->cpf,
+            ],
+            'resumo' => [
+                'acoes'          => $acoes->count(),
+                'abastecimentos' => $acoes->where('tipo', 'abastecimento')->count(),
+                'lavagens'       => $acoes->where('tipo', 'lavagem')->count(),
+                'manutencoes'    => $acoes->where('tipo', 'manutencao')->count(),
+                'total_litros'   => round((float) $acoes->where('tipo', 'abastecimento')->sum('litros'), 2),
+                'gasto_total'    => round((float) $acoes->sum('valor'), 2),
+            ],
+            'acoes' => $acoes->values(),
+        ]);
     }
 
-    private function precoMedioLitro(string $de, string $ate): float
+    // RELATORIO EXPORTAR_MOTORISTA — CSV do histórico.
+    public function exportarMotorista(Request $request, Motorista $motorista): StreamedResponse
     {
-        $entradas = EntradaCombustivel::whereDate('data', '>=', $de)
-            ->whereDate('data', '<=', $ate)
-            ->where('litros', '>', 0)
+        $dias = $this->dias($request);
+        $acoes = $this->acoesMotorista($motorista->id, $dias);
+        $slug = preg_replace('/[^a-z0-9]+/i', '-', mb_strtolower($motorista->nome));
+
+        $linhas = [
+            ['Data', 'Tipo', 'Placa', 'Detalhe', 'Litros', 'Km', 'Valor (R$)', 'Status'],
+        ];
+
+        foreach ($acoes as $a) {
+            $linhas[] = [
+                $a['data_br'],
+                $a['tipo_rotulo'],
+                $a['placa'] ?? '',
+                $a['detalhe'] ?? '',
+                $a['litros'] !== null ? number_format((float) $a['litros'], 2, ',', '.') : '',
+                $a['km'] !== null ? (string) $a['km'] : '',
+                $a['valor'] !== null ? number_format((float) $a['valor'], 2, ',', '.') : '',
+                $a['status'] ?? '',
+            ];
+        }
+
+        return $this->csv("relatorio-motorista-{$slug}.csv", $linhas);
+    }
+
+    // RELATORIO HISTORICO_CAMINHAO — ações do caminhão no período.
+    public function caminhaoHistorico(Request $request, Caminhao $caminhao): JsonResponse
+    {
+        $dias = $this->dias($request);
+        $acoes = $this->acoesCaminhao($caminhao->id, $dias);
+
+        return response()->json([
+            'dias' => $dias,
+            'caminhao' => [
+                'id'     => $caminhao->id,
+                'placa'  => $caminhao->placa,
+                'modelo' => $caminhao->modelo,
+            ],
+            'resumo' => [
+                'acoes'          => $acoes->count(),
+                'abastecimentos' => $acoes->where('tipo', 'abastecimento')->count(),
+                'lavagens'       => $acoes->where('tipo', 'lavagem')->count(),
+                'manutencoes'    => $acoes->where('tipo', 'manutencao')->count(),
+                'total_litros'   => round((float) $acoes->where('tipo', 'abastecimento')->sum('litros'), 2),
+                'gasto_total'    => round((float) $acoes->sum('valor'), 2),
+            ],
+            'acoes' => $acoes->values(),
+        ]);
+    }
+
+    // RELATORIO EXPORTAR_CAMINHAO — CSV do histórico.
+    public function exportarCaminhao(Request $request, Caminhao $caminhao): StreamedResponse
+    {
+        $dias = $this->dias($request);
+        $acoes = $this->acoesCaminhao($caminhao->id, $dias);
+        $slug = preg_replace('/[^a-z0-9]+/i', '-', mb_strtolower($caminhao->placa));
+
+        $linhas = [
+            ['Data', 'Tipo', 'Motorista', 'Detalhe', 'Litros', 'Km', 'Valor (R$)', 'Status'],
+        ];
+
+        foreach ($acoes as $a) {
+            $linhas[] = [
+                $a['data_br'],
+                $a['tipo_rotulo'],
+                $a['motorista'] ?? '',
+                $a['detalhe'] ?? '',
+                $a['litros'] !== null ? number_format((float) $a['litros'], 2, ',', '.') : '',
+                $a['km'] !== null ? (string) $a['km'] : '',
+                $a['valor'] !== null ? number_format((float) $a['valor'], 2, ',', '.') : '',
+                $a['status'] ?? '',
+            ];
+        }
+
+        return $this->csv("relatorio-caminhao-{$slug}.csv", $linhas);
+    }
+
+    private function dias(Request $request): int
+    {
+        $dias = (int) $request->query('dias', 30);
+
+        return in_array($dias, [0, 7, 30, 90], true) ? $dias : 30;
+    }
+
+    private function abastecimentosPeriodo(int $dias)
+    {
+        return Abastecimento::where('status', 'aprovado')
+            ->with(['caminhao:id,placa,modelo', 'tanque:id,nome', 'motorista:id,nome'])
+            ->when($dias > 0, fn ($q) => $q->where('data', '>=', now()->subDays($dias)->toDateString()))
+            ->orderBy('data')
+            ->orderBy('id')
             ->get();
+    }
 
-        if ($entradas->isEmpty()) {
-            $entradas = EntradaCombustivel::where('litros', '>', 0)->orderByDesc('data')->limit(5)->get();
-        }
+    private function acoesMotorista(int $motoristaId, int $dias)
+    {
+        return $this->acoesHistorico(['motorista_id' => $motoristaId], $dias, incluirPlaca: true);
+    }
 
-        if ($entradas->isEmpty()) {
-            return 5.89;
-        }
+    private function acoesCaminhao(int $caminhaoId, int $dias)
+    {
+        return $this->acoesHistorico(['caminhao_id' => $caminhaoId], $dias, incluirMotorista: true);
+    }
 
-        $totalL = (float) $entradas->sum('litros');
-        $totalV = (float) $entradas->sum('valor_total');
+    private function acoesHistorico(array $filtro, int $dias, bool $incluirPlaca = false, bool $incluirMotorista = false)
+    {
+        $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
+        $acoes = collect();
+        $withAb = array_filter([
+            $incluirPlaca ? 'caminhao:id,placa' : null,
+            $incluirMotorista ? 'motorista:id,nome' : null,
+            'tanque:id,nome',
+        ]);
+        $withOutros = array_filter([
+            $incluirPlaca ? 'caminhao:id,placa' : null,
+            $incluirMotorista ? 'motorista:id,nome' : null,
+        ]);
 
-        return $totalL > 0 ? round($totalV / $totalL, 4) : 5.89;
+        Abastecimento::with($withAb ?: ['tanque:id,nome'])
+            ->where($filtro)
+            ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
+            ->orderByDesc('data')->orderByDesc('id')
+            ->get()
+            ->each(function ($a) use ($acoes, $incluirPlaca, $incluirMotorista) {
+                $origem = $a->origem === 'externo' ? 'Posto' : 'Base';
+                $acoes->push([
+                    'id'          => 'ab-' . $a->id,
+                    'tipo'        => 'abastecimento',
+                    'tipo_rotulo' => 'Abastecimento',
+                    'data'        => Carbon::parse($a->data)->toDateString(),
+                    'data_br'     => Carbon::parse($a->data)->format('d/m/Y'),
+                    'placa'       => $incluirPlaca ? $a->caminhao?->placa : null,
+                    'motorista'   => $incluirMotorista ? $a->motorista?->nome : null,
+                    'detalhe'     => trim($origem . ' · ' . ($a->tanque?->nome ?: ($a->posto ?: ''))),
+                    'litros'      => (float) $a->litros,
+                    'km'          => $a->km,
+                    'valor'       => (float) ($a->valor_total ?? $a->custo_total ?? 0),
+                    'status'      => $a->status,
+                ]);
+            });
+
+        Lavagem::with($withOutros ?: [])
+            ->where($filtro)
+            ->when($inicio && Schema::hasColumn('lavagens', 'data'), fn ($q) => $q->where('data', '>=', $inicio))
+            ->orderByDesc(Schema::hasColumn('lavagens', 'data') ? 'data' : 'id')
+            ->get()
+            ->each(function ($l) use ($acoes, $incluirPlaca, $incluirMotorista) {
+                $data = Schema::hasColumn('lavagens', 'data') && $l->data
+                    ? Carbon::parse($l->data)
+                    : Carbon::parse($l->created_at);
+                $acoes->push([
+                    'id'          => 'lv-' . $l->id,
+                    'tipo'        => 'lavagem',
+                    'tipo_rotulo' => 'Lavagem',
+                    'data'        => $data->toDateString(),
+                    'data_br'     => $data->format('d/m/Y'),
+                    'placa'       => $incluirPlaca ? $l->caminhao?->placa : null,
+                    'motorista'   => $incluirMotorista ? $l->motorista?->nome : null,
+                    'detalhe'     => $l->observacao ?: 'Lavagem',
+                    'litros'      => null,
+                    'km'          => null,
+                    'valor'       => (float) ($l->valor ?? 0),
+                    'status'      => $l->status ?? 'aprovado',
+                ]);
+            });
+
+        Manutencao::with($withOutros ?: [])
+            ->where($filtro)
+            ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
+            ->orderByDesc('data')->orderByDesc('id')
+            ->get()
+            ->each(function ($m) use ($acoes, $incluirPlaca, $incluirMotorista) {
+                $acoes->push([
+                    'id'          => 'mt-' . $m->id,
+                    'tipo'        => 'manutencao',
+                    'tipo_rotulo' => 'Manutenção',
+                    'data'        => Carbon::parse($m->data)->toDateString(),
+                    'data_br'     => Carbon::parse($m->data)->format('d/m/Y'),
+                    'placa'       => $incluirPlaca ? $m->caminhao?->placa : null,
+                    'motorista'   => $incluirMotorista ? $m->motorista?->nome : null,
+                    'detalhe'     => trim(($m->tipo ?? '') . ($m->descricao ? ' · ' . $m->descricao : '')),
+                    'litros'      => null,
+                    'km'          => $m->km,
+                    'valor'       => (float) ($m->valor ?? 0),
+                    'status'      => $m->status ?? 'aprovado',
+                ]);
+            });
+
+        return $acoes->sortByDesc(fn ($a) => [$a['data'], $a['id']])->values();
+    }
+
+    private function csv(string $nome, array $linhas): StreamedResponse
+    {
+        return response()->streamDownload(function () use ($linhas) {
+            $out = fopen('php://output', 'w');
+            // BOM para o Excel abrir acentuação corretamente.
+            fwrite($out, "\xEF\xBB\xBF");
+            foreach ($linhas as $linha) {
+                fputcsv($out, $linha, ';');
+            }
+            fclose($out);
+        }, $nome, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 }

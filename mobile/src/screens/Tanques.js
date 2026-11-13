@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+﻿import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 import Cabecalho from '../components/Cabecalho';
+import Abastecimentos from './Abastecimentos';
 import Entradas from './Entradas';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
@@ -57,7 +58,7 @@ function Campo({ rotulo, ...props }) {
 }
 
 export default function Tanques() {
-  const [aba, setAba] = useState('tanques'); // 'tanques' ou 'entradas'
+  const [aba, setAba] = useState('tanques'); // 'tanques' | 'entradas' | 'abastecidas'
   const [tanques, setTanques] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -192,84 +193,88 @@ export default function Tanques() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="GESTÃO DE TANQUES">
+      <Cabecalho titulo="Tanques">
         {aba === 'tanques' && (
           <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
-            <Text style={styles.botaoNovoTexto}>+ Novo tanque</Text>
+            <Text style={styles.botaoNovoTexto}>+ Novo</Text>
           </Pressable>
         )}
       </Cabecalho>
 
-      <View style={styles.segmentos}>
-        {[
-          ['tanques', 'Tanques'],
-          ['entradas', 'Entradas'],
-        ].map(([valor, rotulo]) => (
-          <Pressable
-            key={valor}
-            onPress={() => setAba(valor)}
-            style={[styles.segmento, aba === valor && styles.segmentoAtivo]}
-          >
-            <Text style={[styles.segmentoTexto, aba === valor && { color: '#fff' }]}>{rotulo}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <View style={styles.corpo}>
+        <View style={styles.segmentos}>
+          {[
+            ['tanques', 'Tanques'],
+            ['entradas', 'Entradas'],
+            ['abastecidas', 'Abastecidas'],
+          ].map(([valor, rotulo]) => (
+            <Pressable
+              key={valor}
+              onPress={() => setAba(valor)}
+              style={[styles.segmento, aba === valor && styles.segmentoAtivo]}
+            >
+              <Text style={[styles.segmentoTexto, aba === valor && { color: '#fff' }]}>{rotulo}</Text>
+            </Pressable>
+          ))}
+        </View>
 
-      {aba === 'entradas' && <Entradas />}
+        {aba === 'entradas' && <Entradas />}
+        {aba === 'abastecidas' && <Abastecimentos embutido />}
 
-      {aba === 'tanques' && (
-        <>
-          {erro && <Text style={styles.erro}>{erro}</Text>}
-          {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+        {aba === 'tanques' && (
+          <>
+            {erro && <Text style={styles.erro}>{erro}</Text>}
+            {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
 
-          <FlatList
-            data={tanques}
-            keyExtractor={(item) => String(item.id)}
-            refreshControl={
-              <RefreshControl
-                refreshing={atualizando}
-                onRefresh={() => {
-                  setAtualizando(true);
-                  carregar();
-                }}
-              />
-            }
-            ListEmptyComponent={
-              !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
-            }
-            contentContainerStyle={{ paddingBottom: 24 }}
-            renderItem={({ item }) => {
-              const pct = percentual(item);
-              const baixo = pct < 20;
-              return (
-                <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-                  <View style={styles.topo}>
-                    <Text style={styles.nomeItem}>
-                      {item.nome} · {item.tipo_combustivel}
-                      {item.principal ? ' · PRINCIPAL' : ''}
+            <FlatList
+              data={tanques}
+              keyExtractor={(item) => String(item.id)}
+              refreshControl={
+                <RefreshControl
+                  refreshing={atualizando}
+                  onRefresh={() => {
+                    setAtualizando(true);
+                    carregar();
+                  }}
+                />
+              }
+              ListEmptyComponent={
+                !carregando && !erro ? <Text style={styles.vazio}>Nenhum tanque cadastrado.</Text> : null
+              }
+              contentContainerStyle={{ paddingBottom: 88 }}
+              renderItem={({ item }) => {
+                const pct = percentual(item);
+                const baixo = pct < 20;
+                return (
+                  <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
+                    <View style={styles.topo}>
+                      <Text style={styles.nomeItem}>
+                        {item.nome} · {item.tipo_combustivel}
+                        {item.principal ? ' · Principal' : ''}
+                      </Text>
+                      {baixo && <Text style={styles.alerta}>Nível baixo</Text>}
+                    </View>
+                    <View style={styles.barraFundo}>
+                      <View
+                        style={[
+                          styles.barra,
+                          { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.detalhe}>
+                      {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
                     </Text>
-                    {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
-                  </View>
-                  <View style={styles.barraFundo}>
-                    <View
-                      style={[
-                        styles.barra,
-                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? '#dc2626' : '#16a34a' },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.detalhe}>
-                    {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
-                  </Text>
-                  <Text style={styles.custo}>
-                    Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
-                  </Text>
-                </Pressable>
-              );
-            }}
-          />
-        </>
-      )}
+                    <Text style={styles.custo}>
+                      Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </>
+        )}
+      </View>
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
@@ -278,7 +283,11 @@ export default function Tanques() {
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>{editando === 'novo' ? 'Novo tanque' : 'Editar tanque'}</Text>
+          <Cabecalho
+            titulo={editando === 'novo' ? 'Novo tanque' : 'Editar tanque'}
+            aoVoltar={fechar}
+            sangrar
+          />
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
 
@@ -383,17 +392,17 @@ export default function Tanques() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  cabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
   segmentos: {
     flexDirection: 'row',
     backgroundColor: '#e5e7eb',
@@ -402,20 +411,26 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   segmento: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  segmentoAtivo: { backgroundColor: '#2563eb' },
-  segmentoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  segmentoAtivo: { backgroundColor: '#dc2626' },
+  segmentoTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  nomeItem: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  alerta: { color: '#dc2626', fontWeight: 'bold', fontSize: 12 },
+  nomeItem: { fontSize: 15, fontWeight: '600', color: '#1f2937', flexShrink: 1, marginRight: 8 },
+  alerta: { color: '#dc2626', fontWeight: '700', fontSize: 12 },
   barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
-  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
+  custo: { fontSize: 13, color: '#dc2626', marginTop: 4, fontWeight: '500' },
 
-  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  formConteudo: {
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
@@ -436,10 +451,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
   opcaoTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },

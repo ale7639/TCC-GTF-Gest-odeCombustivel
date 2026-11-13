@@ -155,6 +155,7 @@
   "This password reset link will expire in :count minutes.": "Este link de redefinição de senha expirará em :count minutos.",
   "Toggle navigation": "Alternar navegação",
   "Token Name": "Nome do Token",
+  "Too Many Attempts.": "Muitas tentativas seguidas. Aguarde 1 minuto e tente novamente.",
   "Too Many Requests": "Muitas solicitações",
   "Two Factor Authentication": "Autenticação de dois fatores",
   "Two factor authentication is now enabled. Scan the following QR code using your phone's authenticator application.": "A autenticação de dois fatores agora está habilitada. Digitalize o seguinte código QR usando o aplicativo autenticador do seu telefone.",

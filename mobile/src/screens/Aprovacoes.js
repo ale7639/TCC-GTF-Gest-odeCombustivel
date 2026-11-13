@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+﻿import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,31 +32,44 @@ const COR = { pendente: '#b45309', aprovado: '#16a34a', recusado: '#dc2626' };
 export default function Aprovacoes() {
   const [status, setStatus] = useState('pendente');
   const [itens, setItens] = useState([]);
+  const [pagina, setPagina] = useState(1);
+  const [ultimaPagina, setUltimaPagina] = useState(1);
+  const [total, setTotal] = useState(0);
   const [pendentes, setPendentes] = useState(0);
   const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
   const [trabalhando, setTrabalhando] = useState(null); // "tipo-id" do item sendo aprovado/recusado
   const [recusando, setRecusando] = useState(null);     // "tipo-id" do item com o campo de motivo aberto
   const [motivo, setMotivo] = useState('');
 
-  const carregar = useCallback(async () => {
-    try {
-      setErro(null);
-      const r = await api(`/aprovacoes?status=${status}`);
-      setItens(r.itens);
-      setPendentes(r.pendentes);
-    } catch (e) {
-      setErro(mensagemDe(e));
-    } finally {
-      setCarregando(false);
-      setAtualizando(false);
-    }
-  }, [status]);
+  const carregar = useCallback(
+    async (numeroPagina = 1) => {
+      try {
+        setErro(null);
+        const r = await api(`/aprovacoes?status=${status}&pagina=${numeroPagina}`);
+        setItens((atual) => (numeroPagina === 1 ? r.itens : [...atual, ...r.itens]));
+        setPagina(r.pagina);
+        setUltimaPagina(r.ultima_pagina);
+        setTotal(r.total);
+        setPendentes(r.pendentes);
+      } catch (e) {
+        setErro(mensagemDe(e));
+      } finally {
+        setCarregando(false);
+        setCarregandoMais(false);
+        setAtualizando(false);
+      }
+    },
+    [status]
+  );
 
   useFocusEffect(
     useCallback(() => {
-      carregar();
+      setCarregando(true);
+      setItens([]);
+      carregar(1);
     }, [carregar])
   );
 
@@ -71,7 +84,7 @@ export default function Aprovacoes() {
       });
       setRecusando(null);
       setMotivo('');
-      await carregar();
+      await carregar(1);
     } catch (e) {
       setErro(mensagemDe(e));
     } finally {
@@ -81,47 +94,78 @@ export default function Aprovacoes() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="APROVAÇÕES" />
+      <Cabecalho titulo="Aprovações" />
 
-      <View style={styles.chips}>
-        {FILTROS.map(([valor, rotulo]) => (
-          <Pressable
-            key={valor}
-            onPress={() => setStatus(valor)}
-            style={[styles.chip, status === valor && styles.chipAtivo]}
-          >
-            <Text style={[styles.chipTexto, status === valor && { color: '#fff' }]}>
-              {rotulo}
-              {valor === 'pendente' && pendentes > 0 ? ` (${pendentes})` : ''}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <View style={styles.corpo}>
+        <View style={styles.chips}>
+          {FILTROS.map(([valor, rotulo]) => (
+            <Pressable
+              key={valor}
+              onPress={() => {
+                setCarregando(true);
+                setItens([]);
+                setStatus(valor);
+              }}
+              style={[styles.chip, status === valor && styles.chipAtivo]}
+            >
+              <Text style={[styles.chipTexto, status === valor && { color: '#fff' }]}>
+                {rotulo}
+                {valor === 'pendente' && pendentes > 0 ? ` (${pendentes})` : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+        {total > 0 && (
+          <Text style={styles.resumo}>
+            {itens.length} de {total}
+          </Text>
+        )}
 
-      <FlatList
-        data={itens}
-        keyExtractor={(item) => `${item.tipo}-${item.id}`}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
-              carregar();
-            }}
-          />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? (
-            <Text style={styles.vazio}>
-              {status === 'pendente' ? 'Nada aguardando aprovação.' : 'Nenhum lançamento nesta lista.'}
-            </Text>
-          ) : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => {
+        {erro && <Text style={styles.erro}>{erro}</Text>}
+        {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+        <FlatList
+          data={itens}
+          keyExtractor={(item) => `${item.tipo}-${item.id}`}
+          refreshControl={
+            <RefreshControl
+              refreshing={atualizando}
+              onRefresh={() => {
+                setAtualizando(true);
+                carregar(1);
+              }}
+            />
+          }
+          ListEmptyComponent={
+            !carregando && !erro ? (
+              <Text style={styles.vazio}>
+                {status === 'pendente' ? 'Nada aguardando aprovação.' : 'Nenhum lançamento nesta lista.'}
+              </Text>
+            ) : null
+          }
+          ListFooterComponent={
+            pagina < ultimaPagina ? (
+              <Pressable
+                style={styles.maisBotao}
+                disabled={carregandoMais}
+                onPress={() => {
+                  setCarregandoMais(true);
+                  carregar(pagina + 1);
+                }}
+              >
+                {carregandoMais ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.maisTexto}>
+                    Carregar mais ({itens.length} de {total})
+                  </Text>
+                )}
+              </Pressable>
+            ) : null
+          }
+          contentContainerStyle={{ paddingBottom: 88 }}
+          renderItem={({ item }) => {
           const chave = `${item.tipo}-${item.id}`;
           const ocupado = trabalhando === chave;
           return (
@@ -215,28 +259,37 @@ export default function Aprovacoes() {
             </View>
           );
         }}
-      />
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   chip: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
     backgroundColor: '#fff',
-    borderRadius: 999,
+    borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  chipAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  chipAtivo: { backgroundColor: '#dc2626' },
   chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
   erro: { color: '#dc2626', marginVertical: 10, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
-  titulo: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
+  maisBotao: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  titulo: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
   quem: { fontSize: 13, color: '#374151', fontWeight: '600', marginTop: 3 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 3 },
   foto: { height: 180, borderRadius: 8, marginTop: 8, backgroundColor: '#e5e7eb' },

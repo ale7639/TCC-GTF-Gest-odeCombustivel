@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use App\Support\StorageUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\URL;
 
 class NotaFiscal extends Model
 {
@@ -14,15 +14,14 @@ class NotaFiscal extends Model
     protected $table = 'notas_fiscais';
 
     protected $fillable = [
-        'numero', 'fornecedor', 'data_emissao', 'valor_total', 'chave_acesso', 'comprovante_path',
+        'numero', 'fornecedor', 'data_emissao', 'valor_total', 'chave_acesso', 'foto',
+        'categoria', 'descricao', 'caminhao_id',
     ];
 
     protected $casts = [
         'data_emissao' => 'date',
-        'valor_total' => 'decimal:2',
+        'valor_total'  => 'decimal:2',
     ];
-
-    protected $appends = ['comprovante_url'];
 
     public function entradas(): HasMany
     {
@@ -34,8 +33,12 @@ class NotaFiscal extends Model
         return $this->hasMany(Manutencao::class);
     }
 
-    public function getComprovanteUrlAttribute(): ?string
+    // Endereço temporário (2 horas) da foto. A foto fica fora da pasta pública;
+    // só quem recebe este endereço assinado consegue abri-la.
+    public function fotoUrl(): ?string
     {
-        return StorageUrl::public($this->comprovante_path);
+        return $this->foto
+            ? URL::temporarySignedRoute('notas-fiscais.foto', now()->addHours(2), ['nota' => $this->id])
+            : null;
     }
 }

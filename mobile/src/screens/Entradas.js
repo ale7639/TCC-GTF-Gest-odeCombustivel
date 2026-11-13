@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react';
+﻿import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,7 +14,10 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
+import Cabecalho from '../components/Cabecalho';
+import SeletorLista from '../components/SeletorLista';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 
 // Funções de formatação.
@@ -43,6 +48,13 @@ const mensagemDe = (e) =>
     ? 'Não foi possível conectar ao servidor.'
     : e.message;
 
+const PERIODOS = [
+  [0, 'Tudo'],
+  [7, '7 dias'],
+  [30, '30 dias'],
+  [90, '90 dias'],
+];
+
 // Formulário em branco para uma entrada nova.
 const formVazio = () => ({
   tanque_id: null,
@@ -51,7 +63,6 @@ const formVazio = () => ({
   valor_total: '',
   nf_numero: '',
   nf_fornecedor: '',
-  nf_chave_acesso: '',
 });
 
 // Campo de texto com rótulo em cima.
@@ -73,51 +84,97 @@ function Opcao({ texto, ativo, aoTocar }) {
   );
 }
 
+function Chip({ texto, ativo, aoTocar }) {
+  return (
+    <Pressable onPress={aoTocar} style={[styles.chip, ativo && styles.chipAtivo]}>
+      <Text style={[styles.chipTexto, ativo && { color: '#fff' }]}>{texto}</Text>
+    </Pressable>
+  );
+}
+
 // Esta tela aparece dentro da aba "Tanques", no botão "Entradas".
 export default function Entradas() {
   const [entradas, setEntradas] = useState([]);
+  const [pagina, setPagina] = useState(1);
+  const [ultimaPagina, setUltimaPagina] = useState(1);
+  const [total, setTotal] = useState(0);
   const [tanques, setTanques] = useState([]);
+  const [dias, setDias] = useState(30);
+  const [tanqueFiltro, setTanqueFiltro] = useState(null);
+
   const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(null);
 
   const [formAberto, setFormAberto] = useState(false);
   const [form, setForm] = useState(formVazio());
+  const [foto, setFoto] = useState(null);
+  const [fotoAberta, setFotoAberta] = useState(null); // URL da foto aberta na lista
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState(null);
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
 
-  const carregar = useCallback(async () => {
+  const carregarLista = useCallback(
+    async (numeroPagina = 1) => {
+      try {
+        setErro(null);
+        const params = new URLSearchParams({
+          pagina: String(numeroPagina),
+          dias: String(dias),
+        });
+        if (tanqueFiltro) params.set('tanque_id', String(tanqueFiltro));
+
+        const resposta = await api(`/entradas?${params.toString()}`);
+        setEntradas((atual) =>
+          numeroPagina === 1 ? resposta.dados : [...atual, ...resposta.dados]
+        );
+        setPagina(resposta.pagina);
+        setUltimaPagina(resposta.ultima_pagina);
+        setTotal(resposta.total);
+      } catch (e) {
+        setErro('Não foi possível carregar as entradas. Verifique se o servidor está ligado.');
+      } finally {
+        setCarregando(false);
+        setCarregandoMais(false);
+        setAtualizando(false);
+      }
+    },
+    [dias, tanqueFiltro]
+  );
+
+  const carregarApoio = useCallback(async () => {
     try {
-      setErro(null);
-      // As duas listas são buscadas ao mesmo tempo.
-      const [listaEntradas, listaTanques] = await Promise.all([api('/entradas'), api('/tanques')]);
-      setEntradas(listaEntradas);
-      setTanques(listaTanques);
+      setTanques(await api('/tanques'));
     } catch (e) {
-      setErro('Não foi possível carregar as entradas. Verifique se o servidor está ligado.');
-    } finally {
-      setCarregando(false);
-      setAtualizando(false);
+      // A lista principal já mostra o aviso de conexão.
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      carregar();
-    }, [carregar])
+      carregarApoio();
+      carregarLista(1);
+    }, [carregarApoio, carregarLista])
   );
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
+  const escolherFoto = async () => {
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    if (!r.canceled) setFoto(r.assets[0]);
+  };
+
   const abrirNovo = () => {
     setForm(formVazio());
+    setFoto(null);
     setErroForm(null);
     setFormAberto(true);
   };
 
   const fechar = () => {
     setFormAberto(false);
+    setFoto(null);
     setErroForm(null);
   };
 
@@ -140,6 +197,8 @@ export default function Entradas() {
     const litros = Number(String(form.litros).replace(',', '.'));
     const valor = moedaParaNumero(form.valor_total);
     const data = paraISO(form.data);
+    const nfNumero = form.nf_numero.trim();
+    const nfFornecedor = form.nf_fornecedor.trim();
 
     if (!form.tanque_id) {
       setErroForm('Escolha o tanque.');
@@ -157,25 +216,50 @@ export default function Entradas() {
       setErroForm('Informe a data no formato dd/mm/aaaa.');
       return;
     }
+    if (foto && !nfNumero) {
+      setErroForm('Informe o número da nota para anexar a foto.');
+      return;
+    }
+    if (nfNumero && !nfFornecedor) {
+      setErroForm('Informe o fornecedor da nota fiscal.');
+      return;
+    }
 
     setSalvando(true);
     setErroForm(null);
     try {
-      await api('/entradas', {
-        metodo: 'POST',
-        corpo: {
-          tanque_id: form.tanque_id,
-          data,
-          litros,
-          valor_total: valor,
-          // Campos da nota fiscal: vazio vira null (a nota é opcional).
-          nf_numero: form.nf_numero.trim() || null,
-          nf_fornecedor: form.nf_fornecedor.trim() || null,
-          nf_chave_acesso: form.nf_chave_acesso.replace(/\D/g, '') || null,
-        },
-      });
+      if (foto) {
+        // FormData permite enviar a foto junto com os campos.
+        const corpo = new FormData();
+        corpo.append('tanque_id', String(form.tanque_id));
+        corpo.append('data', data);
+        corpo.append('litros', String(litros));
+        corpo.append('valor_total', String(valor));
+        corpo.append('nf_numero', nfNumero);
+        corpo.append('nf_fornecedor', nfFornecedor);
+        const nome = foto.fileName ?? 'foto.jpg';
+        if (Platform.OS === 'web') {
+          corpo.append('foto', await (await fetch(foto.uri)).blob(), nome);
+        } else {
+          corpo.append('foto', { uri: foto.uri, name: nome, type: foto.mimeType ?? 'image/jpeg' });
+        }
+        await api('/entradas', { metodo: 'POST', corpo });
+      } else {
+        await api('/entradas', {
+          metodo: 'POST',
+          corpo: {
+            tanque_id: form.tanque_id,
+            data,
+            litros,
+            valor_total: valor,
+            nf_numero: nfNumero || null,
+            nf_fornecedor: nfFornecedor || null,
+          },
+        });
+      }
       fechar();
-      await carregar();
+      carregarApoio();
+      await carregarLista(1);
     } catch (e) {
       setErroForm(mensagemDe(e));
     } finally {
@@ -193,19 +277,49 @@ export default function Entradas() {
     try {
       await api(`/entradas/${id}`, { metodo: 'DELETE' });
       setConfirmandoId(null);
-      await carregar();
+      carregarApoio();
+      await carregarLista(1);
     } catch (e) {
       setErro(mensagemDe(e));
       setConfirmandoId(null);
     }
   };
 
+  const filtros = (
+    <View style={styles.filtros}>
+      <View style={styles.chips}>
+        {PERIODOS.map(([valor, rotulo]) => (
+          <Chip key={valor} texto={rotulo} ativo={dias === valor} aoTocar={() => setDias(valor)} />
+        ))}
+      </View>
+      <View style={styles.chips}>
+        <Chip texto="Todos os tanques" ativo={tanqueFiltro === null} aoTocar={() => setTanqueFiltro(null)} />
+        {tanques.map((t) => (
+          <Chip
+            key={t.id}
+            texto={t.nome}
+            ativo={tanqueFiltro === t.id}
+            aoTocar={() => setTanqueFiltro(t.id)}
+          />
+        ))}
+      </View>
+      <Text style={styles.resumo}>
+        {total} {total === 1 ? 'entrada' : 'entradas'}
+      </Text>
+    </View>
+  );
+
+  const opcoesTanque = tanques.map((t) => ({
+    valor: t.id,
+    rotulo: `${t.nome} · ${t.tipo_combustivel} (${litrosFmt(t.nivel_atual)} de ${litrosFmt(t.capacidade)} L)`,
+  }));
+
   return (
     <View style={styles.raiz}>
       <View style={styles.cabecalho}>
         <Text style={styles.subtitulo}>Compras de combustível</Text>
         <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
-          <Text style={styles.botaoNovoTexto}>+ Nova entrada</Text>
+          <Text style={styles.botaoNovoTexto}>+ Nova</Text>
         </Pressable>
       </View>
 
@@ -215,17 +329,39 @@ export default function Entradas() {
       <FlatList
         data={entradas}
         keyExtractor={(item) => String(item.id)}
+        ListHeaderComponent={filtros}
         refreshControl={
           <RefreshControl
             refreshing={atualizando}
             onRefresh={() => {
               setAtualizando(true);
-              carregar();
+              carregarApoio();
+              carregarLista(1);
             }}
           />
         }
         ListEmptyComponent={
           !carregando && !erro ? <Text style={styles.vazio}>Nenhuma entrada registrada.</Text> : null
+        }
+        ListFooterComponent={
+          pagina < ultimaPagina ? (
+            <Pressable
+              style={styles.maisBotao}
+              disabled={carregandoMais}
+              onPress={() => {
+                setCarregandoMais(true);
+                carregarLista(pagina + 1);
+              }}
+            >
+              {carregandoMais ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.maisTexto}>
+                  Carregar mais ({entradas.length} de {total})
+                </Text>
+              )}
+            </Pressable>
+          ) : null
         }
         contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => (
@@ -254,6 +390,11 @@ export default function Entradas() {
                 ? `NF ${item.nota_fiscal.numero} · ${item.nota_fiscal.fornecedor}`
                 : 'Sem nota fiscal'}
             </Text>
+            {item.nota_fiscal?.foto_url ? (
+              <Pressable onPress={() => setFotoAberta(item.nota_fiscal.foto_url)}>
+                <Text style={styles.verFoto}>Ver foto da nota</Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
       />
@@ -265,19 +406,17 @@ export default function Entradas() {
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>Nova entrada de combustível</Text>
+          <Cabecalho titulo="Nova entrada" aoVoltar={fechar} sangrar />
 
-          <Text style={styles.rotulo}>Tanque</Text>
-          <View style={styles.opcoes}>
-            {tanques.map((t) => (
-              <Opcao
-                key={t.id}
-                texto={`${t.nome} · ${t.tipo_combustivel} (${litrosFmt(t.nivel_atual)} de ${litrosFmt(t.capacidade)} L)`}
-                ativo={form.tanque_id === t.id}
-                aoTocar={() => mudar('tanque_id', t.id)}
-              />
-            ))}
-          </View>
+          <SeletorLista
+            rotulo="Tanque"
+            valor={form.tanque_id}
+            opcoes={opcoesTanque}
+            aoMudar={(id) => mudar('tanque_id', id)}
+            placeholder="Escolher tanque…"
+            placeholderBusca="Buscar tanque…"
+            vazio="Nenhum tanque cadastrado."
+          />
 
           <Campo
             rotulo="Data (dd/mm/aaaa)"
@@ -311,13 +450,17 @@ export default function Entradas() {
             value={form.nf_fornecedor}
             onChangeText={(v) => mudar('nf_fornecedor', v)}
           />
-          <Campo
-            rotulo="Chave de acesso (44 números)"
-            value={form.nf_chave_acesso}
-            onChangeText={(v) => mudar('nf_chave_acesso', v)}
-            keyboardType="numeric"
-            maxLength={54}
-          />
+          <Text style={styles.rotulo}>Foto da nota (opcional)</Text>
+          <View style={styles.opcoes}>
+            <Opcao texto={foto ? 'Trocar foto' : 'Escolher foto'} ativo={false} aoTocar={escolherFoto} />
+            {foto && <Opcao texto="Remover foto" ativo={false} aoTocar={() => setFoto(null)} />}
+          </View>
+          {foto && (
+            <>
+              <Text style={styles.avisoFoto}>Foto selecionada: {foto.fileName ?? 'imagem'}</Text>
+              <Image source={{ uri: foto.uri }} style={styles.fotoPreview} resizeMode="contain" />
+            </>
+          )}
 
           {previa && (
             <View style={styles.previa}>
@@ -345,6 +488,15 @@ export default function Entradas() {
           </Pressable>
         </ScrollView>
       </Modal>
+
+      <Modal visible={!!fotoAberta} transparent animationType="fade" onRequestClose={() => setFotoAberta(null)}>
+        <Pressable style={styles.fotoModal} onPress={() => setFotoAberta(null)}>
+          {fotoAberta ? (
+            <Image source={{ uri: fotoAberta }} style={styles.fotoGrande} resizeMode="contain" />
+          ) : null}
+          <Text style={styles.fecharFoto}>Toque para fechar</Text>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -358,26 +510,67 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   subtitulo: { fontSize: 16, fontWeight: '600', color: '#374151' },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  botaoNovo: {
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  filtros: { marginBottom: 4 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  chip: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  chipAtivo: { backgroundColor: '#dc2626' },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 10 },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  principal: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
+  principal: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  verFoto: { fontSize: 13, color: '#dc2626', fontWeight: '600', marginTop: 6 },
   excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   excluirAtivo: { color: '#dc2626' },
-  custo: { fontSize: 13, color: '#2563eb', marginTop: 4, fontWeight: '500' },
-  previa: { backgroundColor: '#eff6ff', borderRadius: 8, padding: 12, marginBottom: 16 },
-  previaTitulo: { fontSize: 14, fontWeight: '600', color: '#1e3a8a', marginBottom: 4 },
+  custo: { fontSize: 13, color: '#dc2626', marginTop: 4, fontWeight: '500' },
+  maisBotao: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
+  previa: { backgroundColor: '#fef2f2', borderRadius: 8, padding: 12, marginBottom: 16 },
+  previaTitulo: { fontSize: 14, fontWeight: '600', color: '#991b1b', marginBottom: 4 },
   previaLinha: { fontSize: 14, color: '#374151', marginTop: 2 },
-  previaDepois: { fontSize: 16, fontWeight: 'bold', color: '#1e3a8a', marginTop: 4 },
+  previaDepois: { fontSize: 16, fontWeight: '700', color: '#991b1b', marginTop: 4 },
+  avisoFoto: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
+  fotoPreview: { height: 160, borderRadius: 8, marginBottom: 12, backgroundColor: '#e5e7eb' },
+  fotoModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  fotoGrande: { width: '100%', height: '80%', maxWidth: 720 },
+  fecharFoto: { color: '#fff', marginTop: 12, fontWeight: '600' },
 
-  modal: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 12 },
+  modal: { flex: 1, backgroundColor: '#f3f4f6' },
   secao: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 10 },
-  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  formConteudo: {
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
@@ -397,10 +590,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Gestão de Frota",
+    "slug": "gestao-de-frota",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,15 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Gestão de Frota",
+      "shortName": "Frota",
+      "lang": "pt-BR",
+      "themeColor": "#dc2626",
+      "backgroundColor": "#f3f4f6",
+      "display": "standalone",
+      "orientation": "portrait",
+      "description": "Gestão de frota e combustível — interface mobile-first"
     },
     "plugins": [
       "expo-secure-store"

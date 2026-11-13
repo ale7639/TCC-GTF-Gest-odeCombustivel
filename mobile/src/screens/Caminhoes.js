@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,6 +14,14 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import SeletorLista from '../components/SeletorLista';
+import EstadoVazio from '../ui/EstadoVazio';
+import Esqueleto from '../ui/Esqueleto';
+import MensagemErro from '../ui/MensagemErro';
+import { useToast } from '../ui/Toast';
+import { cartaoBase, RAIO_BOTAO, RAIO_CAMPO, RAIO_CARTAO, sombraSuave } from '../ui/tema';
+
+const POR_PAGINA = 15;
 
 // 15000 -> "15.000"
 const numero = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -63,16 +71,8 @@ function Campo({ rotulo, ...props }) {
   );
 }
 
-// Botão de escolha (usado para selecionar o motorista).
-function Opcao({ texto, ativo, aoTocar }) {
-  return (
-    <Pressable onPress={aoTocar} style={[styles.opcaoSimples, ativo && styles.opcaoSimplesAtiva]}>
-      <Text style={[styles.opcaoSimplesTexto, ativo && { color: '#fff' }]}>{texto}</Text>
-    </Pressable>
-  );
-}
-
 export default function Caminhoes() {
+  const toast = useToast();
   const [caminhoes, setCaminhoes] = useState([]);
   const [motoristas, setMotoristas] = useState([]); // usados para escolher o motorista do caminhão
   const [carregando, setCarregando] = useState(true);
@@ -80,6 +80,7 @@ export default function Caminhoes() {
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos'); // 'todos' | 'ativo' | 'manutencao' | 'inativo'
+  const [visiveis, setVisiveis] = useState(POR_PAGINA);
 
   // editando: null = formulário fechado | 'novo' = cadastrando | objeto = alterando aquele caminhão
   const [editando, setEditando] = useState(null);
@@ -99,7 +100,7 @@ export default function Caminhoes() {
       setCaminhoes(listaCaminhoes);
       setMotoristas(listaMotoristas);
     } catch (e) {
-      setErro('Não foi possível carregar os caminhões. Verifique se o servidor está ligado.');
+      setErro('Não foi possível carregar a frota. Verifique a conexão e se o servidor está ligado.');
     } finally {
       setCarregando(false);
       setAtualizando(false);
@@ -138,11 +139,27 @@ export default function Caminhoes() {
     });
   }, [caminhoes, busca, filtroStatus]);
 
+  useEffect(() => {
+    setVisiveis(POR_PAGINA);
+  }, [busca, filtroStatus, caminhoes]);
+
+  const pagina = filtrados.slice(0, visiveis);
+  const temMais = visiveis < filtrados.length;
+
   // Motoristas que podem ser escolhidos: ativos e sem caminhão, mais o que já conduz este caminhão.
   const motoristasDisponiveis = useMemo(() => {
     const idDele = editando && editando !== 'novo' ? editando.motorista_id : null;
     return motoristas.filter((m) => m.id === idDele || (m.ativo && !m.caminhao));
   }, [motoristas, editando]);
+
+  // Opções do seletor (dropdown) de motorista — lista clara, igual aos outros formulários.
+  const opcoesMotorista = useMemo(
+    () => [
+      { valor: null, rotulo: 'Nenhum' },
+      ...motoristasDisponiveis.map((m) => ({ valor: m.id, rotulo: m.nome })),
+    ],
+    [motoristasDisponiveis]
+  );
 
   const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
@@ -195,8 +212,10 @@ export default function Caminhoes() {
     try {
       if (editando === 'novo') {
         await api('/caminhoes', { metodo: 'POST', corpo });
+        toast.sucesso('Caminhão cadastrado.');
       } else {
         await api(`/caminhoes/${editando.id}`, { metodo: 'PUT', corpo });
+        toast.sucesso('Caminhão atualizado.');
       }
       fechar();
       await carregar();
@@ -218,6 +237,7 @@ export default function Caminhoes() {
     setErroForm(null);
     try {
       await api(`/caminhoes/${editando.id}`, { metodo: 'DELETE' });
+      toast.sucesso('Caminhão excluído.');
       fechar();
       await carregar();
     } catch (e) {
@@ -230,75 +250,131 @@ export default function Caminhoes() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="GESTÃO DE FROTA">
-        <Pressable style={styles.botaoNovo} onPress={abrirNovo}>
+      <Cabecalho titulo="Frota">
+        <Pressable
+          style={({ pressed }) => [styles.botaoNovo, pressed && { opacity: 0.85 }]}
+          onPress={abrirNovo}
+        >
           <Text style={styles.botaoNovoTexto}>+ Novo</Text>
         </Pressable>
       </Cabecalho>
 
-      {/* Cartões com o resumo da frota: tocar em um deles filtra a lista */}
-      <View style={styles.cartoes}>
-        {[
-          ['todos', 'Total', '#2563eb'],
-          ['ativo', 'Ativos', '#16a34a'],
-          ['manutencao', 'Manutenção', '#d97706'],
-          ['inativo', 'Inativos', '#6b7280'],
-        ].map(([valor, rotulo, cor]) => (
-          <Pressable
-            key={valor}
-            onPress={() => setFiltroStatus(valor)}
-            style={[styles.cartaoFiltro, filtroStatus === valor && { borderColor: cor, borderWidth: 2 }]}
-          >
-            <Text style={[styles.cartaoNumero, { color: cor }]}>{contagem[valor]}</Text>
-            <Text style={styles.cartaoRotulo}>{rotulo}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <View style={styles.corpo}>
+        {/* Cartões com o resumo da frota: tocar em um deles filtra a lista */}
+        <View style={styles.cartoes}>
+          {[
+            ['todos', 'Total', '#dc2626'],
+            ['ativo', 'Ativos', '#16a34a'],
+            ['manutencao', 'Manutenção', '#d97706'],
+            ['inativo', 'Inativos', '#6b7280'],
+          ].map(([valor, rotulo, cor]) => (
+            <Pressable
+              key={valor}
+              onPress={() => setFiltroStatus(valor)}
+              style={({ pressed }) => [
+                styles.cartaoFiltro,
+                filtroStatus === valor && { borderColor: cor, borderWidth: 2 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.cartaoNumero, { color: cor }]}>{contagem[valor]}</Text>
+              <Text style={styles.cartaoRotulo}>{rotulo}</Text>
+            </Pressable>
+          ))}
+        </View>
 
-      <TextInput
-        style={styles.busca}
-        placeholder="Buscar caminhão (placa, modelo ou motorista)"
-        value={busca}
-        onChangeText={setBusca}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+        <TextInput
+          style={styles.busca}
+          placeholder="Buscar caminhão..."
+          value={busca}
+          onChangeText={setBusca}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+        {filtrados.length > 0 && (
+          <Text style={styles.resumo}>
+            Mostrando {pagina.length} de {filtrados.length}
+          </Text>
+        )}
 
-      <FlatList
-        data={filtrados}
-        keyExtractor={(item) => String(item.id)}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
+        {erro && (
+          <MensagemErro
+            titulo="Erro ao carregar a frota"
+            mensagem={erro}
+            aoTentar={() => {
+              setCarregando(true);
               carregar();
             }}
           />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum caminhão encontrado.</Text> : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => (
-          <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
-            <View style={styles.topo}>
-              <Text style={styles.placa}>{item.placa}</Text>
-              <Etiqueta status={item.status} />
-            </View>
-            <Text style={styles.modelo}>
-              {item.modelo} · {item.ano}
-            </Text>
-            <Text style={styles.detalhe}>
-              {numero(item.km_atual)} km · tanque de {numero(item.capacidade_tanque)} L
-            </Text>
-            <Text style={styles.detalhe}>Motorista: {item.motorista?.nome ?? 'sem motorista'}</Text>
-          </Pressable>
         )}
-      />
+        {carregando && !erro && <Esqueleto linhas={4} />}
+
+        {!carregando && (
+          <FlatList
+            data={pagina}
+            keyExtractor={(item) => String(item.id)}
+            refreshControl={
+              <RefreshControl
+                refreshing={atualizando}
+                onRefresh={() => {
+                  setAtualizando(true);
+                  carregar();
+                }}
+                tintColor="#dc2626"
+              />
+            }
+            ListEmptyComponent={
+              !erro ? (
+                <EstadoVazio
+                  icone="truck-outline"
+                  titulo={
+                    busca.trim() || filtroStatus !== 'todos'
+                      ? 'Nenhum caminhão neste filtro'
+                      : 'Nenhum caminhão cadastrado'
+                  }
+                  dica={
+                    busca.trim() || filtroStatus !== 'todos'
+                      ? 'Ajuste a busca ou o status, ou cadastre um novo.'
+                      : 'Toque em + Novo para cadastrar o primeiro.'
+                  }
+                />
+              ) : null
+            }
+            ListFooterComponent={
+              temMais ? (
+                <Pressable
+                  style={({ pressed }) => [styles.maisBotao, pressed && { opacity: 0.85 }]}
+                  onPress={() => setVisiveis((n) => n + POR_PAGINA)}
+                >
+                  <Text style={styles.maisTexto}>
+                    Carregar mais ({pagina.length} de {filtrados.length})
+                  </Text>
+                </Pressable>
+              ) : null
+            }
+            contentContainerStyle={{ paddingBottom: 88 }}
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [styles.caixa, pressed && styles.caixaPressionada]}
+                onPress={() => abrirEdicao(item)}
+              >
+                <View style={styles.topo}>
+                  <Text style={styles.placa}>{item.placa}</Text>
+                  <Etiqueta status={item.status} />
+                </View>
+                <Text style={styles.modelo}>
+                  {item.modelo} · {item.ano}
+                </Text>
+                <Text style={styles.detalhe}>
+                  {numero(item.km_atual)} km · tanque de {numero(item.capacidade_tanque)} L
+                </Text>
+                <Text style={styles.detalhe}>Motorista: {item.motorista?.nome ?? 'sem motorista'}</Text>
+              </Pressable>
+            )}
+          />
+        )}
+      </View>
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
@@ -307,7 +383,11 @@ export default function Caminhoes() {
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.titulo}>{editando === 'novo' ? 'Novo caminhão' : 'Editar caminhão'}</Text>
+          <Cabecalho
+            titulo={editando === 'novo' ? 'Novo caminhão' : 'Editar caminhão'}
+            aoVoltar={fechar}
+            sangrar
+          />
 
           <Campo
             rotulo="Placa"
@@ -358,27 +438,23 @@ export default function Caminhoes() {
             })}
           </View>
 
-          <Text style={styles.rotulo}>Motorista responsável</Text>
-          <View style={styles.opcoesQuebra}>
-            <Opcao
-              texto="Nenhum"
-              ativo={form.motorista_id === null}
-              aoTocar={() => mudar('motorista_id', null)}
-            />
-            {motoristasDisponiveis.map((m) => (
-              <Opcao
-                key={m.id}
-                texto={m.nome}
-                ativo={form.motorista_id === m.id}
-                aoTocar={() => mudar('motorista_id', m.id)}
-              />
-            ))}
-          </View>
+          <SeletorLista
+            rotulo="Motorista responsável"
+            valor={form.motorista_id}
+            opcoes={opcoesMotorista}
+            aoMudar={(id) => mudar('motorista_id', id)}
+            placeholder="Escolher motorista…"
+            vazio="Nenhum motorista disponível no momento."
+          />
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
           <Pressable
-            style={[styles.botao, salvando && styles.desativado]}
+            style={({ pressed }) => [
+              styles.botao,
+              salvando && styles.desativado,
+              pressed && !salvando && styles.botaoPressionado,
+            ]}
             onPress={salvar}
             disabled={salvando}
           >
@@ -407,54 +483,74 @@ export default function Caminhoes() {
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
-  cabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  tituloTela: { fontSize: 20, fontWeight: 'bold', color: '#111827', flexShrink: 1, marginRight: 8 },
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
   cartoes: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   cartaoFiltro: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderRadius: RAIO_CARTAO,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     paddingVertical: 10,
     alignItems: 'center',
+    ...sombraSuave,
   },
-  cartaoNumero: { fontSize: 22, fontWeight: 'bold' },
+  cartaoNumero: { fontSize: 20, fontWeight: '700' },
   cartaoRotulo: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  botaoNovo: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  botaoNovo: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
   busca: {
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: RAIO_CAMPO,
     padding: 12,
     fontSize: 15,
-    marginBottom: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    outlineStyle: 'none',
+    ...sombraSuave,
   },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 10 },
+  maisBotao: {
+    backgroundColor: '#fff',
+    borderRadius: RAIO_CAMPO,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+    ...sombraSuave,
+  },
+  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
+  caixa: { ...cartaoBase },
+  caixaPressionada: { opacity: 0.82 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  placa: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  modelo: { fontSize: 15, color: '#111827', marginTop: 4 },
+  placa: { fontSize: 17, fontWeight: '700', color: '#1f2937' },
+  modelo: { fontSize: 15, color: '#1f2937', marginTop: 4 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
+  etiqueta: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
-  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  formConteudo: {
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
   grupo: { marginBottom: 12 },
   rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 8,
+    borderRadius: RAIO_CAMPO,
     padding: 12,
     fontSize: 16,
   },
@@ -464,24 +560,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: RAIO_CAMPO,
     paddingVertical: 10,
     alignItems: 'center',
   },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  opcoesQuebra: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  opcaoSimples: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  opcaoSimplesAtiva: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  opcaoSimplesTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
   erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
+  botao: { backgroundColor: '#dc2626', borderRadius: RAIO_BOTAO, padding: 14, alignItems: 'center' },
+  botaoPressionado: { opacity: 0.88, transform: [{ scale: 0.985 }] },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
@@ -489,7 +575,7 @@ const styles = StyleSheet.create({
   botaoExcluir: {
     borderWidth: 1,
     borderColor: '#dc2626',
-    borderRadius: 8,
+    borderRadius: RAIO_BOTAO,
     padding: 14,
     alignItems: 'center',
     marginTop: 16,

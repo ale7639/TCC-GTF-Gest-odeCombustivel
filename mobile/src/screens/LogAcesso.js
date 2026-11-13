@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -127,103 +127,103 @@ export default function LogAcesso() {
 
   return (
     <View style={styles.tela}>
-      <Cabecalho titulo="LOG DE ACESSO" />
+      <Cabecalho titulo="Log de acesso" />
 
-      {erro && <Text style={styles.erro}>{erro}</Text>}
-      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+      <View style={styles.corpo}>
+        {erro && <Text style={styles.erro}>{erro}</Text>}
+        {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
 
-      <FlatList
-        data={registros}
-        keyExtractor={(item) => String(item.id)}
-        ListHeaderComponent={filtros}
-        refreshControl={
-          <RefreshControl
-            refreshing={atualizando}
-            onRefresh={() => {
-              setAtualizando(true);
-              carregar(1);
-            }}
-          />
-        }
-        ListEmptyComponent={
-          !carregando && !erro ? <Text style={styles.vazio}>Nenhum registro encontrado.</Text> : null
-        }
-        ListFooterComponent={
-          pagina < ultimaPagina ? (
-            <Pressable
-              style={styles.maisBotao}
-              disabled={carregandoMais}
-              onPress={() => {
-                setCarregandoMais(true);
-                carregar(pagina + 1);
+        <FlatList
+          data={registros}
+          keyExtractor={(item) => String(item.id)}
+          ListHeaderComponent={filtros}
+          refreshControl={
+            <RefreshControl
+              refreshing={atualizando}
+              onRefresh={() => {
+                setAtualizando(true);
+                carregar(1);
               }}
-            >
-              {carregandoMais ? (
-                <ActivityIndicator />
-              ) : (
-                <Text style={styles.maisTexto}>
-                  Carregar mais ({registros.length} de {total})
+            />
+          }
+          ListEmptyComponent={
+            !carregando && !erro ? <Text style={styles.vazio}>Nenhum registro encontrado.</Text> : null
+          }
+          ListFooterComponent={
+            pagina < ultimaPagina ? (
+              <Pressable
+                style={styles.maisBotao}
+                disabled={carregandoMais}
+                onPress={() => {
+                  setCarregandoMais(true);
+                  carregar(pagina + 1);
+                }}
+              >
+                {carregandoMais ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.maisTexto}>
+                    Carregar mais ({registros.length} de {total})
+                  </Text>
+                )}
+              </Pressable>
+            ) : null
+          }
+          contentContainerStyle={{ paddingBottom: 88 }}
+          renderItem={({ item }) => {
+            const saida = item.evento === 'logout';
+            const titulo = saida ? 'Saída' : item.sucesso ? 'Login' : 'Tentativa falha';
+            const cor = saida ? '#6b7280' : item.sucesso ? '#16a34a' : '#dc2626';
+            return (
+              <View style={styles.caixa}>
+                <View style={styles.topo}>
+                  <Text style={[styles.titulo, { color: cor }]}>{titulo}</Text>
+                  <Text style={styles.data}>{dataHoraBR(item.data_hora)}</Text>
+                </View>
+                <Text style={styles.email}>{item.email}</Text>
+                <Text style={styles.detalhe}>
+                  IP {item.ip ?? '—'} · {item.dispositivo ?? 'Desconhecido'}
                 </Text>
-              )}
-            </Pressable>
-          ) : null
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => {
-          const saida = item.evento === 'logout';
-          const titulo = saida ? 'Saída' : item.sucesso ? 'Login' : 'Tentativa falha';
-          const cor = saida ? '#6b7280' : item.sucesso ? '#16a34a' : '#dc2626';
-          return (
-            <View style={styles.caixa}>
-              <View style={styles.topo}>
-                <Text style={[styles.titulo, { color: cor }]}>{titulo}</Text>
-                <Text style={styles.data}>{dataHoraBR(item.data_hora)}</Text>
+                {item.motivo && <Text style={styles.motivo}>{item.motivo}</Text>}
               </View>
-              <Text style={styles.email}>{item.email}</Text>
-              <Text style={styles.detalhe}>
-                IP {item.ip ?? '—'} · {item.dispositivo ?? 'Desconhecido'}
-              </Text>
-              {item.motivo && <Text style={styles.motivo}>{item.motivo}</Text>}
-            </View>
-          );
-        }}
-      />
+            );
+          }}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6', paddingHorizontal: 16, paddingTop: 56 },
+  tela: { flex: 1, backgroundColor: '#f3f4f6' },
+  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
   filtros: { marginBottom: 4 },
-  busca: { backgroundColor: '#fff', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10 },
+  busca: { backgroundColor: '#fff', borderRadius: 10, padding: 12, fontSize: 15, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
     backgroundColor: '#fff',
-    borderRadius: 999,
+    borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  chipAtivo: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  chipAtivo: { backgroundColor: '#dc2626' },
   chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  resumo: { fontSize: 13, color: '#374151', fontWeight: '600', marginBottom: 10 },
+  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 10 },
   erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
   vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  titulo: { fontSize: 15, fontWeight: 'bold' },
+  titulo: { fontSize: 15, fontWeight: '700' },
   data: { fontSize: 13, color: '#6b7280' },
   email: { fontSize: 15, fontWeight: '600', color: '#111827', marginTop: 4 },
   detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
   motivo: { fontSize: 13, color: '#dc2626', marginTop: 4 },
   maisBotao: {
-    borderWidth: 1,
-    borderColor: '#2563eb',
+    backgroundColor: '#fff',
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 4,
   },
-  maisTexto: { color: '#2563eb', fontWeight: '600', fontSize: 15 },
+  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
 });
