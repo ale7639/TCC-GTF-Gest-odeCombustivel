@@ -6,14 +6,15 @@ use App\Models\Abastecimento;
 use App\Models\Lavagem;
 use App\Models\Manutencao;
 use App\Models\Motorista;
+use App\Models\Tanque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 
 class RelatorioController extends Controller
 {
-    // GET /api/relatorios/abastecimentos?dias=7|30|90|0 — consumo por caminhão e litros por tanque.
-    // dias=0 significa "todo o período".
+    // GET /api/relatorios/abastecimentos?dias=7|30|90|0&tanque_id=  — consumo por caminhão e litros por tanque.
+    // dias=0 significa "todo o período". tanque_id (opcional) mostra só o que saiu daquele tanque.
     public function abastecimentos(Request $request): JsonResponse
     {
         $dias = (int) $request->query('dias', 30);
@@ -21,31 +22,47 @@ class RelatorioController extends Controller
             $dias = 30;
         }
 
-        $abastecimentos = Abastecimento::where('status', 'aprovado')
-            ->with(['caminhao:id,placa,modelo', 'tanque:id,nome'])
+        // Tanque escolhido no filtro (ignora valor que não existe).
+        $tanqueId = (int) $request->query('tanque_id', 0);
+        if ($tanqueId && ! Tanque::whereKey($tanqueId)->exists()) {
+            $tanqueId = 0;
+        }
+
+        // TODOS os abastecimentos aprovados do período (base do cálculo de consumo).
+        $todos = Abastecimento::where('status', 'aprovado')
+            ->with(['caminhao:id,placa,modelo,motorista_id', 'caminhao.motorista:id,nome', 'tanque:id,nome'])
             ->when($dias > 0, fn ($q) => $q->where('data', '>=', now()->subDays($dias)->toDateString()))
             ->orderBy('data')
             ->orderBy('id')
             ->get();
 
-        // Por caminhão: litros, quilômetros rodados e consumo médio no período.
-        $porCaminhao = $abastecimentos->groupBy('caminhao_id')->map(function ($itens) {
-            $primeiro  = $itens->first();
-            $litros    = (float) $itens->sum('litros');
-            $kmRodados = $itens->max('km') - $itens->min('km');
+        // Os que contam para litros e quantidades: todos, ou só os do tanque escolhido.
+        $abastecimentos = $tanqueId ? $todos->where('tanque_id', $tanqueId)->values() : $todos;
+
+        // Consumo é do CAMINHÃO, não do tanque: usa todos os abastecimentos dele no período
+        // (se usasse só os de um tanque, os litros dos outros ficariam de fora e o km/L sairia errado).
+        $todosPorCaminhao = $todos->groupBy('caminhao_id');
+
+        // Por caminhão: litros (do filtro), quilômetros rodados e consumo médio no período.
+        $porCaminhao = $abastecimentos->groupBy('caminhao_id')->map(function ($itens) use ($todosPorCaminhao) {
+            $primeiro   = $itens->first();
+            $doCaminhao = $todosPorCaminhao->get($primeiro->caminhao_id);
+
+            $kmRodados = $doCaminhao->max('km') - $doCaminhao->min('km');
 
             // O primeiro abastecimento só repõe o que foi gasto ANTES do período,
             // então não entra na conta do consumo (por isso são precisos pelo menos dois).
-            $litrosDoConsumo = $litros - (float) $primeiro->litros;
+            $litrosDoConsumo = (float) $doCaminhao->sum('litros') - (float) $doCaminhao->first()->litros;
 
             return [
                 'caminhao_id'    => $primeiro->caminhao_id,
                 'placa'          => $primeiro->caminhao->placa,
                 'modelo'         => $primeiro->caminhao->modelo,
+                'motorista'      => $primeiro->caminhao->motorista?->nome,
                 'abastecimentos' => $itens->count(),
-                'litros'         => round($litros, 2),
+                'litros'         => round((float) $itens->sum('litros'), 2),
                 'km_rodados'     => $kmRodados,
-                'consumo_km_l'   => ($itens->count() > 1 && $litrosDoConsumo > 0 && $kmRodados > 0)
+                'consumo_km_l'   => ($doCaminhao->count() > 1 && $litrosDoConsumo > 0 && $kmRodados > 0)
                     ? round($kmRodados / $litrosDoConsumo, 2)
                     : null,
             ];
@@ -62,7 +79,10 @@ class RelatorioController extends Controller
         $mediaFrota = $porCaminhao->whereNotNull('consumo_km_l')->avg('consumo_km_l');
 
         return response()->json([
-            'dias' => $dias,
+            'dias'      => $dias,
+            'tanque_id' => $tanqueId ?: null,
+            // Lista para os botões do filtro (o principal primeiro).
+            'tanques'   => Tanque::orderByDesc('principal')->orderBy('nome')->get(['id', 'nome']),
             'resumo' => [
                 'total_litros'        => round((float) $abastecimentos->sum('litros'), 2),
                 'abastecimentos'      => $abastecimentos->count(),

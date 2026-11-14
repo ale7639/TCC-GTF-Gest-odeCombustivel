@@ -7,6 +7,7 @@ use App\Models\Caminhao;
 use App\Models\Manutencao;
 use App\Models\Tanque;
 use App\Support\Lancamentos;
+use App\Support\Quilometragem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,8 @@ class AprovacaoController extends Controller
             $caminhao = Caminhao::lockForUpdate()->findOrFail($item->caminhao_id);
 
             if ($tipo === 'abastecimento') {
+                // Confere de novo o salto de km (o km do caminhão pode ter mudado desde o envio).
+                Quilometragem::validar((int) $item->km, (int) $caminhao->km_atual, permitirMenor: true);
                 $this->aplicarAbastecimento($item);
             }
 

@@ -93,6 +93,16 @@ function Chip({ texto, ativo, aoTocar }) {
   );
 }
 
+// Uma linha "rótulo ........ valor" do resumo de confirmação.
+function LinhaResumo({ rotulo, valor }) {
+  return (
+    <View style={styles.linhaResumo}>
+      <Text style={styles.linhaResumoRotulo}>{rotulo}</Text>
+      <Text style={styles.linhaResumoValor}>{valor}</Text>
+    </View>
+  );
+}
+
 export default function Abastecimentos() {
   const [abastecimentos, setAbastecimentos] = useState([]); // itens já carregados (acumulam ao "carregar mais")
   const [pagina, setPagina] = useState(1);
@@ -116,6 +126,7 @@ export default function Abastecimentos() {
   const [formAberto, setFormAberto] = useState(false);
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
+  const [confirmacao, setConfirmacao] = useState(null); // resumo mostrado antes de gravar
   const [erroForm, setErroForm] = useState(null);
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
 
@@ -175,21 +186,29 @@ export default function Abastecimentos() {
   // Só caminhões ativos e com motorista responsável podem ser abastecidos.
   const caminhoesDisponiveis = caminhoes.filter((c) => c.status === 'ativo' && c.motorista_id);
 
-  const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
+  // Qualquer mudança no formulário cancela o resumo (precisa conferir de novo).
+  const mudar = (campo, valor) => {
+    setConfirmacao(null);
+    setForm((atual) => ({ ...atual, [campo]: valor }));
+  };
 
   // Ao escolher o caminhão, já sugere a quilometragem atual dele.
-  const escolherCaminhao = (c) =>
+  const escolherCaminhao = (c) => {
+    setConfirmacao(null);
     setForm((atual) => ({ ...atual, caminhao_id: c.id, km: String(c.km_atual) }));
+  };
 
   const abrirNovo = () => {
     setForm(formVazio());
     setErroForm(null);
+    setConfirmacao(null);
     setFormAberto(true);
   };
 
   const fechar = () => {
     setFormAberto(false);
     setErroForm(null);
+    setConfirmacao(null);
   };
 
   // Veio do botão "Abastecer caminhão" do Painel: já abre o formulário.
@@ -198,7 +217,18 @@ export default function Abastecimentos() {
     if (rota.params?.novo) abrirNovo();
   }, [rota.params?.novo]);
 
-  const salvar = async () => {
+  // Veio de um cartão do Relatório: aplica a placa, o período e o tanque que estavam lá.
+  useEffect(() => {
+    const f = rota.params?.filtro;
+    if (!f) return;
+    setBusca(f.busca ?? '');
+    setBuscaAplicada(f.busca ?? ''); // aplica na hora, sem esperar a pausa de digitação
+    setDias(f.dias ?? 30);
+    setTanqueFiltro(f.tanqueId ?? null);
+  }, [rota.params?.filtro]);
+
+  // Passo 1 ("Registrar"): confere os campos e mostra o resumo para o usuário confirmar.
+  const revisar = () => {
     const litros = Number(String(form.litros).replace(',', '.'));
     const km = Number(form.km);
     const data = paraISO(form.data);
@@ -220,18 +250,35 @@ export default function Abastecimentos() {
       return;
     }
 
+    const caminhao = caminhoes.find((c) => c.id === form.caminhao_id);
+    const tanque = tanques.find((t) => t.id === form.tanque_id);
+    const custoMedio = tanque?.custo_medio != null ? Number(tanque.custo_medio) : null;
+
+    setErroForm(null);
+    setConfirmacao({
+      corpo: { caminhao_id: form.caminhao_id, tanque_id: form.tanque_id, litros, km, data },
+      caminhao: caminhao ? `${caminhao.placa} · ${caminhao.motorista?.nome ?? ''}` : '',
+      tanque: tanque ? tanque.nome : '',
+      litros,
+      km,
+      data: form.data,
+      sobraNoTanque: tanque ? Number(tanque.nivel_atual) - litros : null,
+      custoEstimado: custoMedio != null ? litros * custoMedio : null,
+    });
+  };
+
+  // Passo 2 ("Confirmar abastecimento"): grava de verdade.
+  const confirmar = async () => {
     setSalvando(true);
     setErroForm(null);
     try {
-      await api('/abastecimentos', {
-        metodo: 'POST',
-        corpo: { caminhao_id: form.caminhao_id, tanque_id: form.tanque_id, litros, km, data },
-      });
+      await api('/abastecimentos', { metodo: 'POST', corpo: confirmacao.corpo });
       fechar();
       carregarApoio();
       await carregarLista(1);
     } catch (e) {
       setErroForm(mensagemDe(e));
+      setConfirmacao(null); // volta ao formulário para corrigir o que o servidor recusou
     } finally {
       setSalvando(false);
     }
@@ -427,17 +474,46 @@ export default function Abastecimentos() {
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
-          <Pressable
-            style={[styles.botao, salvando && styles.desativado]}
-            onPress={salvar}
-            disabled={salvando}
-          >
-            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Registrar</Text>}
-          </Pressable>
+          {!confirmacao ? (
+            <>
+              <Pressable style={styles.botao} onPress={revisar}>
+                <Text style={styles.botaoTexto}>Registrar</Text>
+              </Pressable>
+              <Pressable style={styles.botaoSecundario} onPress={fechar}>
+                <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.confirmacao}>
+              <Text style={styles.confirmacaoTitulo}>Confirme o abastecimento</Text>
+              <LinhaResumo rotulo="Caminhão" valor={confirmacao.caminhao} />
+              <LinhaResumo rotulo="Tanque" valor={confirmacao.tanque} />
+              <LinhaResumo rotulo="Litros" valor={`${litrosFmt(confirmacao.litros)} L`} />
+              <LinhaResumo rotulo="Quilometragem" valor={`${numero(confirmacao.km)} km`} />
+              <LinhaResumo rotulo="Data" valor={confirmacao.data} />
+              {confirmacao.sobraNoTanque != null && (
+                <LinhaResumo rotulo="Tanque fica com" valor={`${litrosFmt(Math.max(0, confirmacao.sobraNoTanque))} L`} />
+              )}
+              {confirmacao.custoEstimado != null && (
+                <LinhaResumo rotulo="Custo estimado" valor={moeda(confirmacao.custoEstimado)} />
+              )}
 
-          <Pressable style={styles.botaoSecundario} onPress={fechar} disabled={salvando}>
-            <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
-          </Pressable>
+              <Pressable
+                style={[styles.botao, { marginTop: 12 }, salvando && styles.desativado]}
+                onPress={confirmar}
+                disabled={salvando}
+              >
+                {salvando ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.botaoTexto}>Confirmar abastecimento</Text>
+                )}
+              </Pressable>
+              <Pressable style={styles.botaoSecundario} onPress={() => setConfirmacao(null)} disabled={salvando}>
+                <Text style={styles.botaoSecundarioTexto}>Voltar e corrigir</Text>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
         </Moldura>
       </Modal>
@@ -521,4 +597,22 @@ const styles = StyleSheet.create({
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
   botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
+  confirmacao: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.primaria,
+    borderRadius: 12,
+    padding: 14,
+  },
+  confirmacaoTitulo: { fontSize: 16, fontWeight: 'bold', color: cores.primaria, marginBottom: 8 },
+  linhaResumo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: cores.bordaClara,
+    gap: 12,
+  },
+  linhaResumoRotulo: { fontSize: 14, color: cores.textoSecundario },
+  linhaResumoValor: { fontSize: 14, fontWeight: '600', color: cores.texto, flexShrink: 1, textAlign: 'right' },
 });

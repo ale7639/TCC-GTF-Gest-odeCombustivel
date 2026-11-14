@@ -8,6 +8,7 @@ use App\Models\Lavagem;
 use App\Models\Manutencao;
 use App\Models\Tanque;
 use App\Support\Lancamentos;
+use App\Support\Quilometragem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -103,11 +104,8 @@ class MeuController extends Controller
                 'litros' => 'O tanque do seu caminhão comporta no máximo ' . (float) $caminhao->capacidade_tanque . ' L.',
             ]);
         }
-        if ((int) $dados['km'] < $caminhao->km_atual) {
-            throw ValidationException::withMessages([
-                'km' => 'A quilometragem não pode ser menor que a atual (' . $caminhao->km_atual . ' km).',
-            ]);
-        }
+        // Km não pode ser menor que o atual nem andar mais que o limite desde o último registro.
+        Quilometragem::validar((int) $dados['km'], (int) $caminhao->km_atual);
 
         $externo = $dados['origem'] === 'externo';
 

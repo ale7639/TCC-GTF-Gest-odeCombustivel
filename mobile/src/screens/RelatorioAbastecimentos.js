@@ -6,9 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
 import { cores } from '../ui/tema';
@@ -57,17 +59,25 @@ export default function RelatorioAbastecimentos() {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [atualizando, setAtualizando] = useState(false);
+  const [busca, setBusca] = useState(''); // filtra a lista "Por caminhão" (placa, modelo ou motorista)
+  const [tanqueId, setTanqueId] = useState(null); // null = todos os tanques
+  const navegacao = useNavigation();
+
+  // Toque no cartão do caminhão: abre a lista de abastecimentos dele, no mesmo período e tanque.
+  // "chave" muda a cada toque, para a outra tela aplicar o filtro mesmo se for a mesma placa.
+  const verAbastecimentos = (placa) =>
+    navegacao.navigate('Abastecimentos', { filtro: { busca: placa, dias, tanqueId, chave: Date.now() } });
 
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      setDados(await api(`/relatorios/abastecimentos?dias=${dias}`));
+      setDados(await api(`/relatorios/abastecimentos?dias=${dias}${tanqueId ? `&tanque_id=${tanqueId}` : ''}`));
     } catch (e) {
       setErro('Não foi possível carregar o relatório. Verifique se o servidor está ligado.');
     } finally {
       setAtualizando(false);
     }
-  }, [dias]);
+  }, [dias, tanqueId]);
 
   // Recarrega ao abrir a tela e quando o período muda.
   useFocusEffect(
@@ -77,6 +87,20 @@ export default function RelatorioAbastecimentos() {
   );
 
   const maxCaminhao = dados ? Math.max(0, ...dados.por_caminhao.map((c) => c.litros)) : 0;
+
+  // Busca sem diferenciar maiúsculas, acentos, traço ou espaço: "abc-1d" acha "ABC1D23".
+  const normalizar = (t) =>
+    String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const termo = normalizar(busca);
+  const caminhoesFiltrados = dados
+    ? dados.por_caminhao.filter(
+        (c) =>
+          !termo ||
+          normalizar(c.placa).includes(termo) ||
+          normalizar(c.modelo).includes(termo) ||
+          normalizar(c.motorista).includes(termo)
+      )
+    : [];
   const maxTanque = dados ? Math.max(0, ...dados.por_tanque.map((t) => t.litros)) : 0;
 
   return (
@@ -107,6 +131,21 @@ export default function RelatorioAbastecimentos() {
         ))}
       </View>
 
+      {/* Filtro por tanque: tudo abaixo passa a contar só o que saiu do tanque escolhido */}
+      {dados?.tanques?.length > 0 && (
+        <View style={styles.tanques}>
+          {[{ id: null, nome: 'Todos os tanques' }, ...dados.tanques].map((t) => (
+            <Pressable
+              key={t.id ?? 'todos'}
+              onPress={() => setTanqueId(t.id)}
+              style={[styles.chip, tanqueId === t.id && styles.chipAtivo]}
+            >
+              <Text style={[styles.chipTexto, tanqueId === t.id && { color: '#fff' }]}>{t.nome}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {erro && <Text style={styles.erro}>{erro}</Text>}
       {!dados && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
 
@@ -132,12 +171,45 @@ export default function RelatorioAbastecimentos() {
           {dados.por_caminhao.length === 0 && (
             <Text style={styles.vazio}>Nenhum abastecimento no período.</Text>
           )}
-          {dados.por_caminhao.map((c) => (
-            <View key={c.caminhao_id} style={styles.caixa}>
-              <View style={styles.topo}>
-                <Text style={styles.nomeItem}>
-                  {c.placa} · {c.modelo}
+
+          {dados.por_caminhao.length > 0 && (
+            <>
+              <View style={styles.busca}>
+                <MaterialCommunityIcons name="magnify" size={20} color={cores.textoSecundario} />
+                <TextInput
+                  style={styles.buscaCampo}
+                  placeholder="Buscar placa, modelo ou motorista"
+                  value={busca}
+                  onChangeText={setBusca}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {busca !== '' && (
+                  <Pressable onPress={() => setBusca('')} hitSlop={8}>
+                    <MaterialCommunityIcons name="close-circle" size={18} color={cores.textoClaro} />
+                  </Pressable>
+                )}
+              </View>
+              {termo !== '' && (
+                <Text style={styles.contagem}>
+                  {caminhoesFiltrados.length} de {dados.por_caminhao.length} caminhões
                 </Text>
+              )}
+              {termo !== '' && caminhoesFiltrados.length === 0 && (
+                <Text style={styles.vazio}>Nenhum caminhão encontrado para "{busca}".</Text>
+              )}
+            </>
+          )}
+
+          {caminhoesFiltrados.map((c) => (
+            <Pressable key={c.caminhao_id} style={styles.caixa} onPress={() => verAbastecimentos(c.placa)}>
+              <View style={styles.topo}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.nomeItem}>
+                    {c.placa} · {c.modelo}
+                  </Text>
+                  {c.motorista ? <Text style={styles.motorista}>{c.motorista}</Text> : null}
+                </View>
                 <Text style={styles.destaque}>
                   {c.consumo_km_l != null ? `${consumoFmt(c.consumo_km_l)} km/L` : '—'}
                 </Text>
@@ -150,12 +222,13 @@ export default function RelatorioAbastecimentos() {
               {c.consumo_km_l == null && (
                 <Text style={styles.nota}>Consumo precisa de pelo menos 2 abastecimentos no período.</Text>
               )}
-            </View>
+              <Text style={styles.verMais}>Ver abastecimentos ›</Text>
+            </Pressable>
           ))}
 
           <Text style={styles.secao}>Por tanque</Text>
           {dados.por_tanque.map((t) => (
-            <View key={t.tanque_id} style={styles.caixa}>
+            <Pressable key={t.tanque_id} style={styles.caixa} onPress={() => setTanqueId(t.tanque_id)}>
               <View style={styles.topo}>
                 <Text style={styles.nomeItem}>{t.nome}</Text>
                 <Text style={styles.destaque}>{litrosFmt(t.litros)} L</Text>
@@ -164,7 +237,7 @@ export default function RelatorioAbastecimentos() {
               <Text style={styles.detalhe}>
                 {t.abastecimentos} {t.abastecimentos === 1 ? 'abastecimento' : 'abastecimentos'}
               </Text>
-            </View>
+            </Pressable>
           ))}
 
           <Text style={styles.rodape}>
@@ -214,4 +287,30 @@ const styles = StyleSheet.create({
   detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
   nota: { fontSize: 12, color: cores.textoClaro, marginTop: 4 },
   rodape: { fontSize: 12, color: cores.textoSecundario, marginTop: 16, lineHeight: 18 },
+  busca: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.borda,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  buscaCampo: { flex: 1, paddingVertical: 10, fontSize: 15 },
+  contagem: { fontSize: 12, color: cores.textoSecundario, marginBottom: 8 },
+  tanques: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  chip: {
+    borderWidth: 1,
+    borderColor: cores.borda,
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  motorista: { fontSize: 12, color: cores.textoSecundario, marginTop: 1 },
+  verMais: { fontSize: 12, fontWeight: '600', color: cores.primaria, marginTop: 6, textAlign: 'right' },
 });
