@@ -28,7 +28,7 @@ const mensagemDe = (e) =>
 
 // Os três status possíveis, com o texto e a cor de cada um.
 const STATUS = [
-  { valor: 'ativo', rotulo: 'Ativo', cor: cores.texto },
+  { valor: 'ativo', rotulo: 'Ativo', cor: cores.ativo },
   { valor: 'manutencao', rotulo: 'Manutenção', cor: cores.primaria },
   { valor: 'inativo', rotulo: 'Inativo', cor: cores.textoSecundario },
 ];
@@ -242,7 +242,7 @@ export default function Caminhoes() {
       <View style={styles.cartoes}>
         {[
           ['todos', 'Total', cores.primaria],
-          ['ativo', 'Ativos', cores.texto],
+          ['ativo', 'Ativos', cores.ativo],
           ['manutencao', 'Manutenção', cores.primaria],
           ['inativo', 'Inativos', cores.textoSecundario],
         ].map(([valor, rotulo, cor]) => (

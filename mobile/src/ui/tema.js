@@ -4,7 +4,8 @@
 //  - primaria (vermelho): botões, destaques e o que pede atenção (pendente, nível baixo, manutenção);
 //  - perigo (vermelho escuro): erros, excluir, recusar, sair;
 //  - branco e cinzas: fundo, cartões, textos e bordas (aprovado/ativo/sucesso ficam neutros);
-//  - única exceção: o botão do WhatsApp, verde, que é a cor que o usuário reconhece.
+//  - exceções em verde: o botão do WhatsApp (a cor que o usuário reconhece)
+//    e o status "Ativo" do caminhão (pronto para rodar).
 export const cores = {
   primaria: '#e53935',
   primariaClara: '#fdecea',  // fundo vermelho bem claro (avisos, pré-visualizações)
@@ -24,6 +25,7 @@ export const cores = {
   bordaClara: '#e5e7eb',
 
   whatsapp: '#16a34a',       // exceção: só no botão do WhatsApp
+  ativo: '#16a34a',          // exceção: caminhão ativo (na etiqueta vira fundo verde claro)
 };
 
 // Largura da "tela de celular" quando o sistema abre no computador.
