@@ -18,6 +18,7 @@ use App\Http\Middleware\ApenasAdmin;
 use App\Http\Middleware\ApenasMotorista;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\RelatorioCaminhaoController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -81,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Relatórios.
         Route::get('/relatorios/abastecimentos', [RelatorioController::class, 'abastecimentos']);
         Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
+        Route::get('/relatorios/caminhoes/{caminhao}', [RelatorioCaminhaoController::class, 'show']);
         Route::get('/notas-fiscais', [NotaFiscalController::class, 'index']);
         Route::post('/notas-fiscais', [NotaFiscalController::class, 'store']);
         Route::delete('/notas-fiscais/{id}', [NotaFiscalController::class, 'destroy'])->whereNumber('id');

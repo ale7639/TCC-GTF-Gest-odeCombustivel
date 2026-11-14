@@ -13,7 +13,7 @@ const ATALHOS = [
     rotulo: 'Relatórios',
     icone: 'chart-box-outline',
     rota: 'RelatorioAbastecimentos',
-    ativas: ['RelatorioAbastecimentos', 'RelatorioMotoristas', 'NotasFiscais'],
+    ativas: ['RelatorioAbastecimentos', 'RelatorioMotoristas', 'RelatorioCaminhoes', 'NotasFiscais'],
   },
   { rotulo: 'Mais', icone: 'dots-horizontal', rota: null, ativas: [] },
 ];

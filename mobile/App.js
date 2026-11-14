@@ -16,6 +16,7 @@ import Abastecimentos from './src/screens/Abastecimentos';
 import Tanques from './src/screens/Tanques';
 import RelatorioAbastecimentos from './src/screens/RelatorioAbastecimentos';
 import RelatorioMotoristas from './src/screens/RelatorioMotoristas';
+import RelatorioCaminhoes from './src/screens/RelatorioCaminhoes';
 import LogAcesso from './src/screens/LogAcesso';
 import Aprovacoes from './src/screens/Aprovacoes';
 import Servicos from './src/screens/Servicos';
@@ -63,6 +64,7 @@ function Rotas() {
             <Tab.Screen name="Aprovacoes" component={Aprovacoes} />
             <Tab.Screen name="RelatorioAbastecimentos" component={RelatorioAbastecimentos} />
             <Tab.Screen name="RelatorioMotoristas" component={RelatorioMotoristas} />
+            <Tab.Screen name="RelatorioCaminhoes" component={RelatorioCaminhoes} />
             <Tab.Screen name="NotasFiscais" component={NotasFiscais} />
             <Tab.Screen name="LogAcesso" component={LogAcesso} />
           </Tab.Navigator>

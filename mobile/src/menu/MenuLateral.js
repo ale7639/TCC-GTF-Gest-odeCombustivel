@@ -21,6 +21,7 @@ const ITENS = [
   { secao: 'Relatórios' },
   { rota: 'RelatorioAbastecimentos', rotulo: 'Abastecimentos', icone: 'chart-box-outline' },
   { rota: 'RelatorioMotoristas', rotulo: 'Motoristas', icone: 'account-details-outline' },
+  { rota: 'RelatorioCaminhoes', rotulo: 'Caminhões', icone: 'truck-check-outline' },
   { rota: 'NotasFiscais', rotulo: 'Notas fiscais', icone: 'file-document-outline' },
   { secao: 'Segurança' },
   { rota: 'LogAcesso', rotulo: 'Log de acesso', icone: 'shield-account-outline' },
