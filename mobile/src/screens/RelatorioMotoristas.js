@@ -6,9 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
 import { cores } from '../ui/tema';
@@ -65,6 +67,17 @@ export default function RelatorioMotoristas() {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [atualizando, setAtualizando] = useState(false);
+  const [busca, setBusca] = useState(''); // filtra os cartões por nome do motorista ou placa
+  const navegacao = useNavigation();
+
+  // Toque no cartão: abre os abastecimentos desse motorista, no mesmo período do relatório.
+  // "chave" muda a cada toque, para a outra tela aplicar o filtro mesmo se for o mesmo motorista.
+  const verAbastecimentos = (nome) =>
+    navegacao.navigate('Abastecimentos', { filtro: { busca: nome, dias, tanqueId: null, chave: Date.now() } });
+
+  // Busca sem diferenciar maiúsculas, acentos, traço ou espaço: "joao" acha "João".
+  const normalizar = (t) =>
+    String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 
   const carregar = useCallback(async () => {
     try {
@@ -82,6 +95,13 @@ export default function RelatorioMotoristas() {
       carregar();
     }, [carregar])
   );
+
+  const termo = normalizar(busca);
+  const filtrados = dados
+    ? dados.motoristas.filter(
+        (m) => !termo || normalizar(m.nome).includes(termo) || m.placas.some((pl) => normalizar(pl).includes(termo))
+      )
+    : [];
 
   return (
     <ScrollView
@@ -124,8 +144,37 @@ export default function RelatorioMotoristas() {
 
           {dados.motoristas.length === 0 && <Text style={styles.vazio}>Nenhum motorista cadastrado.</Text>}
 
-          {dados.motoristas.map((m) => (
-            <View key={m.motorista_id} style={styles.caixa}>
+          {dados.motoristas.length > 0 && (
+            <>
+              <View style={styles.busca}>
+                <MaterialCommunityIcons name="magnify" size={20} color={cores.textoSecundario} />
+                <TextInput
+                  style={styles.buscaCampo}
+                  placeholder="Buscar motorista ou placa"
+                  value={busca}
+                  onChangeText={setBusca}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {busca !== '' && (
+                  <Pressable onPress={() => setBusca('')} hitSlop={8}>
+                    <MaterialCommunityIcons name="close-circle" size={18} color={cores.textoClaro} />
+                  </Pressable>
+                )}
+              </View>
+              {busca.trim() !== '' && (
+                <Text style={styles.contagem}>
+                  {filtrados.length} de {dados.motoristas.length} motoristas
+                </Text>
+              )}
+              {busca.trim() !== '' && filtrados.length === 0 && (
+                <Text style={styles.vazio}>Nenhum motorista encontrado para "{busca}".</Text>
+              )}
+            </>
+          )}
+
+          {filtrados.map((m) => (
+            <Pressable key={m.motorista_id} style={styles.caixa} onPress={() => verAbastecimentos(m.nome)}>
               {/* Topo: iniciais + nome e placas + consumo em destaque */}
               <View style={styles.topoMotorista}>
                 <View style={styles.avatar}>
@@ -156,7 +205,8 @@ export default function RelatorioMotoristas() {
                 <Indicador valor={m.manutencoes} rotulo="Manutenções" />
                 <Indicador valor={m.gasto_manutencao > 0 ? moeda(m.gasto_manutencao) : '—'} rotulo="Gasto manutenção" />
               </View>
-            </View>
+              {m.abastecimentos > 0 && <Text style={styles.verMais}>Ver abastecimentos ›</Text>}
+            </Pressable>
           ))}
 
           <Text style={styles.nota}>
@@ -217,4 +267,18 @@ const styles = StyleSheet.create({
   indicadorValor: { fontSize: 15, fontWeight: 'bold', color: cores.texto },
   indicadorRotulo: { fontSize: 11, color: cores.textoSecundario, marginTop: 2, textAlign: 'center' },
   nota: { fontSize: 12, color: cores.textoSecundario, marginTop: 8 },
+  busca: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.borda,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  buscaCampo: { flex: 1, paddingVertical: 10, fontSize: 15 },
+  contagem: { fontSize: 12, color: cores.textoSecundario, marginBottom: 8 },
+  verMais: { fontSize: 12, fontWeight: '600', color: cores.primaria, marginTop: 4, textAlign: 'right' },
 });
