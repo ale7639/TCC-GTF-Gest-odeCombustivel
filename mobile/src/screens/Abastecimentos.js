@@ -14,6 +14,7 @@ import {
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import SeletorCaminhao from '../components/SeletorCaminhao';
 import Moldura from '../ui/Moldura';
 import { cores } from '../ui/tema';
 
@@ -386,19 +387,12 @@ export default function Abastecimentos() {
           <Cabecalho titulo="Novo abastecimento" aoVoltar={fechar} />
 
           <Text style={styles.rotulo}>Caminhão</Text>
-          <View style={styles.opcoes}>
-            {caminhoesDisponiveis.length === 0 && (
-              <Text style={styles.aviso}>Nenhum caminhão ativo com motorista responsável.</Text>
-            )}
-            {caminhoesDisponiveis.map((c) => (
-              <Opcao
-                key={c.id}
-                texto={`${c.placa} · ${c.motorista?.nome ?? ''}`}
-                ativo={form.caminhao_id === c.id}
-                aoTocar={() => escolherCaminhao(c)}
-              />
-            ))}
-          </View>
+          <SeletorCaminhao
+            caminhoes={caminhoesDisponiveis}
+            selecionadoId={form.caminhao_id}
+            aoEscolher={escolherCaminhao}
+            vazio="Nenhum caminhão ativo com motorista responsável."
+          />
 
           <Text style={styles.rotulo}>Tanque de origem</Text>
           <View style={styles.opcoes}>
