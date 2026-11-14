@@ -15,6 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import SeletorCaminhao from '../components/SeletorCaminhao';
 import Moldura from '../ui/Moldura';
 import { mascaraMoeda, moeda, moedaParaNumero } from '../utils/formatos';
 import { cores } from '../ui/tema';
@@ -200,6 +201,16 @@ export default function NotasFiscais() {
 
   const maiorFornecedor = dados?.por_fornecedor?.[0]?.valor ?? 0;
 
+  // Sugestões do campo Fornecedor: compara sem maiúsculas, acentos e pontuação ("volvo" acha "VOLVO Ltda").
+  const normalizar = (t) =>
+    String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const termoFornecedor = normalizar(form.fornecedor);
+  const sugestoesFornecedor = termoFornecedor
+    ? (dados?.fornecedores ?? [])
+        .filter((f) => normalizar(f).includes(termoFornecedor) && normalizar(f) !== termoFornecedor)
+        .slice(0, 5)
+    : [];
+
   const topo = (
     <View>
       <TextInput
@@ -363,7 +374,22 @@ export default function NotasFiscais() {
           </View>
 
           <Campo rotulo="Número da nota" value={form.numero} onChangeText={(v) => mudar('numero', v)} maxLength={20} />
-          <Campo rotulo="Fornecedor" value={form.fornecedor} onChangeText={(v) => mudar('fornecedor', v)} />
+          <Campo
+            rotulo="Fornecedor"
+            placeholder="Digite para ver os já cadastrados"
+            value={form.fornecedor}
+            onChangeText={(v) => mudar('fornecedor', v)}
+          />
+          {/* Sugestões: fornecedores já usados que combinam com o que foi digitado */}
+          {sugestoesFornecedor.length > 0 && (
+            <View style={styles.sugestoes}>
+              {sugestoesFornecedor.map((f) => (
+                <Pressable key={f} style={styles.sugestao} onPress={() => mudar('fornecedor', f)}>
+                  <Text style={styles.sugestaoTexto}>{f}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           <Campo
             rotulo="Data de emissão (dd/mm/aaaa)"
             value={form.data}
@@ -385,12 +411,14 @@ export default function NotasFiscais() {
           />
 
           <Text style={styles.rotulo}>Caminhão (opcional)</Text>
-          <View style={styles.chips}>
-            <Chip texto="Nenhum" ativo={form.caminhao_id === null} aoTocar={() => mudar('caminhao_id', null)} />
-            {caminhoes.map((c) => (
-              <Chip key={c.id} texto={c.placa} ativo={form.caminhao_id === c.id} aoTocar={() => mudar('caminhao_id', c.id)} />
-            ))}
-          </View>
+          <Text style={styles.detalhe}>Deixe sem caminhão para despesas gerais da empresa.</Text>
+          <SeletorCaminhao
+            caminhoes={caminhoes}
+            selecionadoId={form.caminhao_id}
+            aoEscolher={(c) => mudar('caminhao_id', c.id)}
+            aoRemover={() => mudar('caminhao_id', null)}
+            vazio="Nenhum caminhão cadastrado."
+          />
 
           <Campo
             rotulo="Chave de acesso (44 números, opcional)"
@@ -472,4 +500,14 @@ const styles = StyleSheet.create({
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
   botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
+  sugestoes: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.bordaClara,
+    borderRadius: 8,
+    marginTop: -6,
+    marginBottom: 12,
+  },
+  sugestao: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: cores.bordaClara },
+  sugestaoTexto: { fontSize: 14, color: cores.texto },
 });

@@ -119,7 +119,22 @@ class NotaFiscalController extends Controller
             'compras'        => round($notas->where('origem', 'compra')->sum('valor'), 2),
             'postos'         => round($notas->where('origem', 'posto')->sum('valor'), 2),
             'por_fornecedor' => $porFornecedor,
+            // Todos os fornecedores e postos já usados (sugestões no campo "Fornecedor" do formulário).
+            'fornecedores'   => self::fornecedores(),
         ]);
+    }
+
+    // Nomes de fornecedores já cadastrados, sem repetir, em ordem alfabética.
+    private static function fornecedores(): array
+    {
+        return NotaFiscal::whereNotNull('fornecedor')->distinct()->pluck('fornecedor')
+            ->merge(Abastecimento::where('origem', 'externo')->whereNotNull('posto')->distinct()->pluck('posto'))
+            ->map(fn ($nome) => trim($nome))
+            ->filter()
+            ->unique(fn ($nome) => mb_strtolower($nome))
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 
     // POST /api/notas-fiscais — nota de outra despesa (compra de veículo, peças, pneus, serviços...).
@@ -144,6 +159,12 @@ class NotaFiscalController extends Controller
             'data_emissao' => 'data de emissão',
             'valor_total'  => 'valor',
         ]);
+
+        // Fornecedor: tira espaços repetidos e, se já existe um igual (ignorando maiúsculas),
+        // usa o nome já cadastrado. Assim "volvo" e "Volvo" não viram dois fornecedores no relatório.
+        $nome      = preg_replace('/\s+/', ' ', trim($dados['fornecedor']));
+        $existente = collect(self::fornecedores())->first(fn ($f) => mb_strtolower($f) === mb_strtolower($nome));
+        $dados['fornecedor'] = $existente ?? $nome;
 
         NotaFiscal::forceCreate($dados);
 

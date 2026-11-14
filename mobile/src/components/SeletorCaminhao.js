@@ -18,7 +18,14 @@ const normalizar = (texto) =>
 // Escolha de caminhão com busca por placa, motorista ou modelo.
 // Funciona bem com poucos ou com muitos caminhões: mostra no máximo 6 por vez.
 // Uso: <SeletorCaminhao caminhoes={lista} selecionadoId={form.caminhao_id} aoEscolher={(c) => ...} />
-export default function SeletorCaminhao({ caminhoes, selecionadoId, aoEscolher, vazio = 'Nenhum caminhão disponível.' }) {
+// Quando o caminhão é opcional, passe também aoRemover={() => ...} para aparecer o botão "Remover".
+export default function SeletorCaminhao({
+  caminhoes,
+  selecionadoId,
+  aoEscolher,
+  aoRemover,
+  vazio = 'Nenhum caminhão disponível.',
+}) {
   const [busca, setBusca] = useState('');
   const [trocando, setTrocando] = useState(false);
 
@@ -44,6 +51,11 @@ export default function SeletorCaminhao({ caminhoes, selecionadoId, aoEscolher, 
         >
           <Text style={styles.trocar}>Trocar</Text>
         </Pressable>
+        {aoRemover && (
+          <Pressable onPress={aoRemover} hitSlop={8}>
+            <Text style={styles.remover}>Remover</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -139,5 +151,6 @@ const styles = StyleSheet.create({
   placa: { fontSize: 15, fontWeight: 'bold', color: cores.texto },
   detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 1 },
   trocar: { fontSize: 14, fontWeight: '700', color: cores.primaria },
+  remover: { fontSize: 14, fontWeight: '700', color: cores.textoSecundario, marginLeft: 6 },
   aviso: { fontSize: 13, color: cores.textoSecundario, marginBottom: 6 },
 });
