@@ -11,6 +11,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+import SecaoRecolhivel from '../components/SecaoRecolhivel';
 import { cores } from '../ui/tema';
 
 // Funções de formatação: 15000 -> "15.000" | 6350 -> "R$ 6.350,00" | "2026-10-16" -> "16/10/2026"
@@ -160,46 +161,48 @@ export default function Dashboard() {
             </>
           )}
 
+          {/* Seções que abrem e fecham ao tocar no título (começam fechadas para o Painel ficar limpo) */}
           {dados.outros_tanques.length > 0 && (
-            <>
-              <Text style={styles.secao}>Outros tanques</Text>
+            <SecaoRecolhivel titulo="Outros tanques" quantidade={dados.outros_tanques.length}>
               {dados.outros_tanques.map((t) => (
                 <NivelTanque key={t.id} tanque={t} />
               ))}
-            </>
+            </SecaoRecolhivel>
           )}
 
-          <Text style={styles.secao}>Últimos abastecimentos</Text>
-          {dados.ultimos_abastecimentos.length === 0 && (
-            <Text style={styles.vazio}>Nenhum abastecimento registrado.</Text>
-          )}
-          {dados.ultimos_abastecimentos.map((a) => (
-            <View key={a.id} style={styles.caixa}>
-              <Text style={styles.nomeItem}>
-                {a.placa} · {numero(a.litros)} L
-              </Text>
-              <Text style={styles.detalhe}>
-                {a.motorista} · {a.tanque} · {dataBR(a.data)}
-              </Text>
-            </View>
-          ))}
-
-          <Text style={styles.secao}>Últimas notas fiscais</Text>
-          {dados.ultimas_notas_fiscais.length === 0 && (
-            <Text style={styles.vazio}>Nenhuma nota fiscal cadastrada.</Text>
-          )}
-          {dados.ultimas_notas_fiscais.map((n) => (
-            <View key={n.id} style={styles.caixa}>
-              <View style={styles.topoTanque}>
-                <Text style={styles.nomeItem}>NF {n.numero}</Text>
-                <Text style={styles.nomeItem}>{moeda(n.valor_total)}</Text>
+          <SecaoRecolhivel titulo="Últimos abastecimentos" quantidade={dados.ultimos_abastecimentos.length}>
+            {dados.ultimos_abastecimentos.length === 0 && (
+              <Text style={styles.vazio}>Nenhum abastecimento registrado.</Text>
+            )}
+            {dados.ultimos_abastecimentos.map((a) => (
+              <View key={a.id} style={styles.caixa}>
+                <Text style={styles.nomeItem}>
+                  {a.placa} · {numero(a.litros)} L
+                </Text>
+                <Text style={styles.detalhe}>
+                  {a.motorista} · {a.tanque} · {dataBR(a.data)}
+                </Text>
               </View>
-              <Text style={styles.detalhe}>
-                {n.fornecedor} · {dataBR(n.data_emissao)}
-              </Text>
-              <Text style={styles.detalhe}>{n.descricao}</Text>
-            </View>
-          ))}
+            ))}
+          </SecaoRecolhivel>
+
+          <SecaoRecolhivel titulo="Últimas notas fiscais" quantidade={dados.ultimas_notas_fiscais.length}>
+            {dados.ultimas_notas_fiscais.length === 0 && (
+              <Text style={styles.vazio}>Nenhuma nota fiscal cadastrada.</Text>
+            )}
+            {dados.ultimas_notas_fiscais.map((n) => (
+              <View key={n.id} style={styles.caixa}>
+                <View style={styles.topoTanque}>
+                  <Text style={styles.nomeItem}>NF {n.numero}</Text>
+                  <Text style={styles.nomeItem}>{moeda(n.valor_total)}</Text>
+                </View>
+                <Text style={styles.detalhe}>
+                  {n.fornecedor} · {dataBR(n.data_emissao)}
+                </Text>
+                <Text style={styles.detalhe}>{n.descricao}</Text>
+              </View>
+            ))}
+          </SecaoRecolhivel>
         </>
       )}
     </ScrollView>
