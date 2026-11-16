@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
@@ -89,11 +90,17 @@ export default function Dashboard() {
   }, [dias]);
 
   // Recarrega toda vez que a aba é aberta ou que o período muda.
+  // Enquanto o Painel está aberto, confere de novo a cada 30 segundos, para o sino
+  // mostrar na hora os abastecimentos que os motoristas enviarem. Ao sair da tela, para.
   useFocusEffect(
     useCallback(() => {
       carregar();
+      const relogio = setInterval(carregar, 30000);
+      return () => clearInterval(relogio);
     }, [carregar])
   );
+
+  const pendentes = dados?.pendentes ?? 0; // lançamentos de motoristas aguardando aprovação
 
   return (
     <ScrollView
@@ -109,7 +116,21 @@ export default function Dashboard() {
         />
       }
     >
-      <Cabecalho titulo="PAINEL DA FROTA" />
+      <Cabecalho titulo="PAINEL DA FROTA">
+        {/* Sino: mostra quantos lançamentos aguardam aprovação; ao tocar, abre Aprovações */}
+        <Pressable
+          onPress={() => navegacao.navigate('Aprovacoes')}
+          hitSlop={8}
+          accessibilityLabel={`${pendentes} lançamentos aguardando aprovação`}
+        >
+          <MaterialCommunityIcons name={pendentes > 0 ? 'bell-ring' : 'bell-outline'} size={26} color="#fff" />
+          {pendentes > 0 && (
+            <View style={styles.selo}>
+              <Text style={styles.seloTexto}>{pendentes > 9 ? '9+' : pendentes}</Text>
+            </View>
+          )}
+        </Pressable>
+      </Cabecalho>
 
       {/* Filtro de período */}
       <View style={styles.periodos}>
@@ -265,4 +286,18 @@ const styles = StyleSheet.create({
   barra: { height: 10 },
   detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
   custo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
+  // Bolinha com o número em cima do sino.
+  selo: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seloTexto: { color: cores.primaria, fontSize: 11, fontWeight: 'bold' },
 });
