@@ -177,6 +177,10 @@ class MeuController extends Controller
             'km'        => 'quilometragem',
         ]);
 
+        // Mesma regra do abastecimento: o km não pode ser menor que o atual do caminhão
+        // nem pular mais que o limite (App\Support\Quilometragem). Barra erro de digitação.
+        Quilometragem::validar((int) $dados['km'], (int) $caminhao->km_atual);
+
         // Manutenção vale na hora (sem aprovação) e atualiza o km do caminhão, se for maior.
         Manutencao::forceCreate([
             'caminhao_id'  => $caminhao->id,

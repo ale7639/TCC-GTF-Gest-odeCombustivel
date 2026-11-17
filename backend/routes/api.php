@@ -1,5 +1,20 @@
 <?php
 
+// =====================================================================================
+// routes/api.php — todas as rotas da API (o Laravel coloca "/api" na frente de cada uma).
+//
+// Organização:
+//   1) rotas públicas: login e foto assinada;
+//   2) auth:sanctum = só com token válido (usuário logado);
+//      2a) ApenasAdmin     = tudo que o administrador faz;
+//      2b) ApenasMotorista = o que o motorista faz (prefixo /meu).
+//
+// CRUDs completos (cadastrar, listar, alterar e excluir):
+//   caminhões, motoristas, tanques, lavagens e manutenções.
+//
+// Para ver a lista de rotas no terminal: php artisan route:list --path=api
+// =====================================================================================
+
 use App\Http\Controllers\AbastecimentoController;
 use App\Http\Controllers\AprovacaoController;
 use App\Http\Controllers\AuthController;
@@ -64,12 +79,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('entradas', EntradaCombustivelController::class)
             ->only(['index', 'store', 'destroy']);
 
-        // Lavagens e manutenções: listar, registrar e excluir.
+        // Lavagens e manutenções: CRUD completo (listar, registrar, alterar e excluir).
+        // whereNumber('id') = a rota só aceita número no {id} (ex.: /lavagens/abc dá 404).
         Route::get('/lavagens', [LavagemController::class, 'index']);
         Route::post('/lavagens', [LavagemController::class, 'store']);
+        Route::put('/lavagens/{id}', [LavagemController::class, 'update'])->whereNumber('id');
         Route::delete('/lavagens/{id}', [LavagemController::class, 'destroy'])->whereNumber('id');
         Route::get('/manutencoes', [ManutencaoController::class, 'index']);
         Route::post('/manutencoes', [ManutencaoController::class, 'store']);
+        Route::put('/manutencoes/{id}', [ManutencaoController::class, 'update'])->whereNumber('id');
         Route::delete('/manutencoes/{id}', [ManutencaoController::class, 'destroy'])->whereNumber('id');
 
         // Aprovação dos lançamentos feitos pelos motoristas.
