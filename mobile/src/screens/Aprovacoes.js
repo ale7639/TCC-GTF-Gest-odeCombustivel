@@ -15,6 +15,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+// Foto que amplia em tela cheia ao tocar.
+import FotoAmpliavel from '../components/FotoAmpliavel';
 import { linkWhatsApp } from '../utils/formatos';
 import { cores } from '../ui/tema';
 
@@ -163,7 +165,8 @@ export default function Aprovacoes() {
               <Text style={styles.detalhe}>{[item.data_br, ...item.linhas].join(' · ')}</Text>
 
               {item.foto_url && (
-                <Image source={{ uri: item.foto_url }} style={styles.foto} resizeMode="cover" />
+                // Tocar na foto abre em tela cheia (para o admin conseguir ler a nota antes de aprovar).
+                <FotoAmpliavel uri={item.foto_url} style={styles.foto} resizeMode="cover" />
               )}
 
               {item.status === 'recusado' && item.motivo_recusa && (

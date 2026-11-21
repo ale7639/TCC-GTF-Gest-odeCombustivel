@@ -15,6 +15,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+// Foto que amplia em tela cheia ao tocar.
+import FotoAmpliavel from '../components/FotoAmpliavel';
 import SeletorCaminhao from '../components/SeletorCaminhao';
 import Moldura from '../ui/Moldura';
 import { mascaraMoeda, moeda, moedaParaNumero } from '../utils/formatos';
@@ -342,7 +344,7 @@ export default function NotasFiscais() {
                 <Text style={styles.chaveAcesso}>Chave de acesso: {item.chave_acesso}</Text>
               )}
               {detalhes && item.foto_url && (
-                <Image source={{ uri: item.foto_url }} style={styles.foto} resizeMode="contain" />
+                <FotoAmpliavel uri={item.foto_url} style={styles.foto} resizeMode="contain" />
               )}
               {!detalhes && (item.chave_acesso || item.foto_url) && (
                 <Text style={styles.verMais}>Toque para ver {item.foto_url ? 'a foto' : 'a chave de acesso'}</Text>
