@@ -92,10 +92,15 @@ export default function RelatorioCaminhoes() {
     }
   }, [caminhaoId, dias]);
 
-  // Roda de novo sempre que o caminhão ou o período mudam.
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  // Busca de novo sempre que a tela volta a aparecer (ex.: depois de aprovar um
+  // abastecimento em outra tela) e também quando o caminhão ou o período mudam.
+  // Antes era um useEffect, que só rodava na troca de caminhão/período: ao voltar
+  // para esta tela, os dados ficavam velhos.
+  useFocusEffect(
+    useCallback(() => {
+      carregar();
+    }, [carregar])
+  );
 
   const historico = dados ? dados.historico.filter((i) => !tipo || i.tipo === tipo) : [];
   const r = dados?.resumo;
