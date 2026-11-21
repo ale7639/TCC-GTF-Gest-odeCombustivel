@@ -35,8 +35,15 @@ const mensagemDe = (e) =>
     ? 'Não foi possível conectar ao servidor.'
     : e.message;
 
-// Atalhos para preencher o tipo de combustível.
-const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina', 'Etanol'];
+// Tipos de combustível aceitos. É uma lista FECHADA: o usuário só escolhe nos botões.
+// Precisa ser igual à lista TIPOS_COMBUSTIVEL do TanqueController (o backend confere de novo).
+const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina comum', 'Gasolina aditivada', 'Etanol'];
+
+// Capacidade: número inteiro de litros, na mesma faixa do backend.
+const CAPACIDADE_MIN = 100;
+const CAPACIDADE_MAX = 100000;
+// Deixa só os números (tira vírgula, ponto, letras...). \D = qualquer coisa que não seja dígito.
+const soNumeros = (v) => v.replace(/\D/g, '');
 
 // Formulário em branco para um tanque novo.
 const formVazio = () => ({
@@ -104,7 +111,8 @@ export default function Tanques() {
     setForm({
       nome: t.nome,
       tipo_combustivel: t.tipo_combustivel,
-      capacidade: String(Number(t.capacidade)),
+      // O banco guarda "1000.00": Math.round deixa "1000" no campo (que só aceita inteiro).
+      capacidade: String(Math.round(Number(t.capacidade))),
       nivel_atual: String(Number(t.nivel_atual)),
       principal: Boolean(t.principal),
     });
@@ -120,15 +128,21 @@ export default function Tanques() {
   };
 
   const salvar = async () => {
-    const capacidade = Number(String(form.capacidade).replace(',', '.'));
+    const capacidade = Number(form.capacidade); // o campo já só tem números inteiros
     const nivel = Number(String(form.nivel_atual || '0').replace(',', '.'));
 
-    if (!form.nome.trim() || !form.tipo_combustivel.trim()) {
-      setErroForm('Preencha o nome e o tipo de combustível.');
+    if (!form.nome.trim()) {
+      setErroForm('Preencha o nome do tanque.');
       return;
     }
-    if (!(capacidade > 0)) {
-      setErroForm('Informe a capacidade em litros.');
+    // includes = confere se o tipo escolhido está na lista (um tanque antigo com
+    // um tipo que saiu da lista, como "Gasolina", precisa escolher de novo).
+    if (!TIPOS.includes(form.tipo_combustivel)) {
+      setErroForm('Escolha o tipo de combustível.');
+      return;
+    }
+    if (form.capacidade === '' || capacidade < CAPACIDADE_MIN || capacidade > CAPACIDADE_MAX) {
+      setErroForm('A capacidade deve ficar entre 100 e 100.000 litros.');
       return;
     }
     if (editando === 'novo' && Number.isNaN(nivel)) {
@@ -285,11 +299,8 @@ export default function Tanques() {
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
 
-          <Campo
-            rotulo="Tipo de combustível"
-            value={form.tipo_combustivel}
-            onChangeText={(v) => mudar('tipo_combustivel', v)}
-          />
+          {/* Tipo de combustível: só os botões (não tem mais campo de texto livre) */}
+          <Text style={styles.rotulo}>Tipo de combustível</Text>
           <View style={styles.opcoes}>
             {TIPOS.map((tipo) => (
               <Pressable
@@ -304,11 +315,14 @@ export default function Tanques() {
             ))}
           </View>
 
+          {/* Capacidade: só números inteiros (soNumeros tira vírgula e ponto enquanto digita) */}
           <Campo
-            rotulo="Capacidade (litros)"
+            rotulo="Capacidade (100 a 100.000 litros)"
             value={form.capacidade}
-            onChangeText={(v) => mudar('capacidade', v)}
-            keyboardType="decimal-pad"
+            onChangeText={(v) => mudar('capacidade', soNumeros(v))}
+            placeholder="Ex.: 15000"
+            keyboardType="numeric"
+            maxLength={6}
           />
 
           {editando === 'novo' ? (

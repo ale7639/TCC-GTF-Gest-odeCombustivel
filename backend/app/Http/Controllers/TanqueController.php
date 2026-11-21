@@ -12,6 +12,11 @@ use Illuminate\Validation\ValidationException;
 
 class TanqueController extends Controller
 {
+    // Tipos de combustível aceitos (lista fechada: evita "teste" ou erro de digitação).
+    // GNV fica de fora: é gás, medido em m³, não fica num tanque de líquido.
+    // A tela Tanques.js mostra exatamente esta mesma lista como botões.
+    public const TIPOS_COMBUSTIVEL = ['Diesel S10', 'Diesel S500', 'Gasolina comum', 'Gasolina aditivada', 'Etanol'];
+
     // GET /api/tanques — lista os tanques da empresa (o principal primeiro).
     public function index(): JsonResponse
     {
@@ -103,13 +108,19 @@ class TanqueController extends Controller
                 'required', 'string', 'max:255',
                 Rule::unique('tanques', 'nome')->ignore($tanque?->id),
             ],
-            'tipo_combustivel' => ['required', 'string', 'max:255'],
-            'capacidade'       => ['required', 'numeric', 'min:1', 'max:99999999'],
+            // Rule::in = só aceita um dos valores da lista TIPOS_COMBUSTIVEL (no topo da classe).
+            'tipo_combustivel' => ['required', Rule::in(self::TIPOS_COMBUSTIVEL)],
+            // Capacidade é um número INTEIRO de litros, numa faixa realista de tanque de base.
+            // (O nível pode ter casas decimais, porque é medido; a capacidade não.)
+            'capacidade'       => ['required', 'integer', 'between:100,100000'],
             'nivel_atual'      => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'principal'        => ['nullable', 'boolean'],
             'custo_litro_inicial' => ['nullable', 'numeric', 'min:0', 'max:99999'],
         ], [
             'nome.unique' => 'Já existe um tanque com este nome.',
+            'tipo_combustivel.in' => 'Escolha um tipo de combustível da lista.',
+            'capacidade.integer'  => 'A capacidade deve ser um número inteiro de litros (sem vírgula).',
+            'capacidade.between'  => 'A capacidade deve ficar entre 100 e 100.000 litros.',
             'required'    => 'Preencha o campo :attribute.',
         ], [
             'tipo_combustivel' => 'tipo de combustível',

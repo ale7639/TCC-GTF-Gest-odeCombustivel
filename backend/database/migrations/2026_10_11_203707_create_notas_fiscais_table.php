@@ -1,5 +1,15 @@
 <?php
 
+// =====================================================================================
+// MIGRATION: tabela "notas_fiscais" + ligação dela com as compras de combustível e as manutenções.
+//
+// Quem usa: NotaFiscalController (tela Notas fiscais), EntradaCombustivelController e
+// ManutencaoController (criam a nota junto com o lançamento). Model App\Models\NotaFiscal.
+// Relação: uma nota pode estar ligada a entradas de combustível e/ou manutenções
+// (elas é que guardam o "nota_fiscal_id").
+// A migration 2026_11_15 acrescentou categoria, descrição e caminhão (notas de outras despesas).
+// =====================================================================================
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +36,7 @@ return new class extends Migration
             // Chave de acesso da NF-e: sempre tem 44 caracteres.
             // É "unique" para impedir cadastrar a mesma nota duas vezes.
             // É "nullable" porque nem toda nota (ex.: nota de papel) tem chave.
+            // (O sistema confere só o formato e a repetição; não consulta a SEFAZ.)
             $table->string('chave_acesso', 44)->nullable()->unique();
 
             $table->timestamps();
