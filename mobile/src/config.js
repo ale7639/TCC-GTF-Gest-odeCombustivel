@@ -8,3 +8,7 @@ export const API_URL =
   Platform.OS === 'web'
     ? 'http://127.0.0.1:8000/api'
     : `http://${IP_DO_COMPUTADOR}:8000/api`;
+
+// WhatsApp do administrador da frota (DDD + celular). Usado no "Esqueci minha senha" da tela de login.
+// Para outra empresa, é só trocar esta linha.
+export const WHATSAPP_ADMIN = '44 98751-3965';
