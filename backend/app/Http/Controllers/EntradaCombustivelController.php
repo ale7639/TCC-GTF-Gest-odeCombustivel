@@ -1,5 +1,20 @@
 <?php
 
+// =====================================================================================
+// EntradaCombustivelController — COMPRAS de combustível para os tanques da base.
+//
+// Rotas (routes/api.php, grupo do admin; tela Tanques > aba Entradas):
+//   GET    /api/entradas        -> index()   as 100 mais recentes
+//   POST   /api/entradas        -> store()   registra a compra (com nota fiscal opcional)
+//   DELETE /api/entradas/{id}   -> destroy() exclui, se o combustível ainda estiver no tanque
+// Não tem "alterar" pelo mesmo motivo do abastecimento: mexe no estoque e no custo médio.
+//
+// É AQUI que o CUSTO MÉDIO PONDERADO muda:
+//   novo custo = (valor que já estava no tanque + valor da compra)
+//              ÷ (litros que já estavam + litros da compra)
+// Exemplo: 1.000 L valendo R$ 5.000 + compra de 2.000 L por R$ 12.000 = R$ 17.000 ÷ 3.000 L = R$ 5,6667/L.
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\EntradaCombustivel;
@@ -13,6 +28,7 @@ use Illuminate\Validation\ValidationException;
 class EntradaCombustivelController extends Controller
 {
     // Dados de outras tabelas que acompanham cada entrada na resposta.
+    // notaFiscal é o nome do relacionamento no model EntradaCombustivel.
     private const RELACOES = ['tanque:id,nome', 'notaFiscal:id,numero,fornecedor,chave_acesso'];
 
     // GET /api/entradas — as 100 mais recentes.
@@ -37,8 +53,10 @@ class EntradaCombustivelController extends Controller
             'valor_total' => ['required', 'numeric', 'min:0', 'max:99999999'],
 
             // Nota fiscal (opcional). Se informar o número, o fornecedor passa a ser obrigatório.
+            // required_with:X = obrigatório se o campo X vier preenchido.
             'nf_numero'        => ['nullable', 'required_with:nf_chave_acesso', 'string', 'max:20'],
             'nf_fornecedor'    => ['nullable', 'required_with:nf_numero', 'string', 'max:255'],
+            // digits:44 = exatamente 44 números; unique = a mesma nota não entra duas vezes.
             'nf_chave_acesso'  => ['nullable', 'digits:44', 'unique:notas_fiscais,chave_acesso'],
         ], [
             'required'                       => 'Preencha o campo :attribute.',
@@ -60,14 +78,17 @@ class EntradaCombustivelController extends Controller
             // Trava o tanque até o fim, para dois lançamentos simultâneos não estourarem a capacidade.
             $tanque = Tanque::lockForUpdate()->findOrFail($dados['tanque_id']);
             $litros = (float) $dados['litros'];
+            // Espaço livre no tanque = capacidade − o que já tem dentro.
             $espaco = (float) $tanque->capacidade - (float) $tanque->nivel_atual;
 
+            // "+ 0.001" = pequena folga para arredondamentos de casas decimais.
             if ($litros > $espaco + 0.001) {
                 throw ValidationException::withMessages([
                     'litros' => 'O ' . $tanque->nome . ' só comporta mais ' . round($espaco, 2) . ' L.',
                 ]);
             }
 
+            // Se veio número de nota, cria a nota fiscal e guarda o id para ligar à entrada.
             $notaId = null;
             if (! empty($dados['nf_numero'])) {
                 $notaId = NotaFiscal::create([
@@ -91,6 +112,7 @@ class EntradaCombustivelController extends Controller
                 'data'             => $dados['data'],
                 'litros'           => $litros,
                 'valor_total'      => $dados['valor_total'],
+                // Fica registrado como era o custo médio logo depois desta compra (histórico).
                 'custo_medio_apos' => $custoMedio,
             ]);
 
@@ -110,6 +132,8 @@ class EntradaCombustivelController extends Controller
         DB::transaction(function () use ($entrada) {
             $tanque = Tanque::lockForUpdate()->findOrFail($entrada->tanque_id);
 
+            // Se o tanque tem menos litros do que esta compra colocou, parte já foi usada:
+            // tirar tudo deixaria o nível negativo.
             if ((float) $tanque->nivel_atual < (float) $entrada->litros) {
                 throw ValidationException::withMessages([
                     'litros' => 'Parte deste combustível já foi usada em abastecimentos, então a entrada não pode ser excluída.',
@@ -125,6 +149,7 @@ class EntradaCombustivelController extends Controller
                     : 0,
             ]);
 
+            // Guarda a nota antes de apagar a entrada (depois não daria para achar).
             $nota = $entrada->notaFiscal;
             $entrada->delete();
 

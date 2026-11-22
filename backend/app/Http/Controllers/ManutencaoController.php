@@ -11,27 +11,36 @@
 //
 // Valor 0 é permitido (regra 'min:0'): serviço em garantia, feito pela própria equipe etc.
 // O motorista também registra manutenções, mas pelo MeuController (rota /api/meu/manutencoes).
+//
+// Regras de negócio deste controller:
+//   - a manutenção fica no nome do motorista responsável pelo caminhão naquele momento;
+//   - km: não pode ser menor que o atual do caminhão nem saltar mais de 5.000 km (Support\Quilometragem);
+//   - o km do caminhão só sobe, nunca "volta" (nem ao excluir);
+//   - nota fiscal opcional: criada junto, atualizada junto (valor e data) e apagada junto.
 // =====================================================================================
 
 namespace App\Http\Controllers;
 
-use App\Models\Caminhao;
-use App\Models\Manutencao;
-use App\Models\Motorista;
-use App\Models\NotaFiscal;
+use App\Models\Caminhao;                             // tabela caminhoes
+use App\Models\Manutencao;                           // tabela manutencoes
+use App\Models\Motorista;                            // tabela motoristas (para mostrar o nome na lista)
+use App\Models\NotaFiscal;                           // tabela notas_fiscais
 use App\Support\Quilometragem;                       // regra do km (não diminui, salto máximo)
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
+use Illuminate\Http\JsonResponse;                    // tipo de resposta: JSON
+use Illuminate\Http\Request;                         // dados que chegaram da tela
+use Illuminate\Support\Carbon;                       // biblioteca de datas (formatar dd/mm/aaaa)
 use Illuminate\Support\Facades\DB;                   // para as transações
-use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\ValidationException;       // devolve erro 422 com mensagem própria
 
 // Manutenções dos caminhões. Tela do ADMIN.
 class ManutencaoController extends Controller
 {
     // GET /api/manutencoes?busca=&dias=0|7|30|90&pagina=1
+    // busca = placa ou nome do motorista | dias = período (0 = tudo) | pagina = qual página de 20.
     public function index(Request $request): JsonResponse
     {
+        // query() começa a consulta; os filtros vão sendo somados antes de ela rodar no banco.
+        // Só as aprovadas (as do motorista e as do admin já nascem aprovadas).
         $consulta = Manutencao::query()->where('status', 'aprovado');
         // Reaproveita os filtros (busca por placa/motorista e período) do LavagemController.
         LavagemController::filtrar($consulta, $request);
@@ -39,6 +48,8 @@ class ManutencaoController extends Controller
         // clone = cópia da consulta, para somar SEM estragar a consulta original (que ainda vai paginar).
         $totalValor = (float) (clone $consulta)->sum('valor'); // de tudo o que passa pelo filtro
 
+        // Mais recentes primeiro. paginate(20, ...) = devolve 20 por vez; 'pagina' é o nome do
+        // parâmetro na URL; max(1, ...) garante que a página nunca seja 0 ou negativa.
         $pagina = $consulta->orderByDesc('data')->orderByDesc('id')
             ->paginate(20, ['*'], 'pagina', max(1, (int) $request->query('pagina', 1)));
 
@@ -49,10 +60,13 @@ class ManutencaoController extends Controller
         $notas  = NotaFiscal::whereIn('id', $pagina->getCollection()->pluck('nota_fiscal_id')->filter())
             ->pluck('numero', 'id');
 
+        // map = transforma cada manutenção no formato que a tela Servicos.js usa.
         return response()->json([
             'dados' => $pagina->getCollection()->map(fn ($m) => [
                 'id'        => $m->id,
+                // A tela mostra (e edita) a data como dd/mm/aaaa.
                 'data'      => Carbon::parse($m->data)->format('d/m/Y'),
+                // "?? '—'" = se não encontrar o caminhão ou o motorista, mostra um traço.
                 'placa'     => $placas[$m->caminhao_id] ?? '—',
                 'motorista' => $nomes[$m->motorista_id] ?? '—',
                 'tipo'      => $m->tipo,
@@ -60,8 +74,11 @@ class ManutencaoController extends Controller
                 // (float) e (int) garantem que vão como número no JSON, não como texto.
                 'valor'     => (float) $m->valor,
                 'km'        => (int) $m->km,
+                // Número da nota fiscal ligada (ou null se a manutenção não tem nota).
                 'nota'      => $m->nota_fiscal_id ? ($notas[$m->nota_fiscal_id] ?? null) : null,
             ])->values(),
+            // Dados da paginação (a tela usa para o botão "Carregar mais").
+            // total_valor = soma dos valores de TODAS as manutenções do filtro (resumo no topo da lista).
             'pagina'        => $pagina->currentPage(),
             'ultima_pagina' => $pagina->lastPage(),
             'total'         => $pagina->total(),
@@ -69,9 +86,10 @@ class ManutencaoController extends Controller
         ]);
     }
 
-    // POST /api/manutencoes
+    // POST /api/manutencoes — o admin registra uma manutenção (com nota fiscal opcional).
     public function store(Request $request): JsonResponse
     {
+        // validate(regras, mensagens, nomes dos campos): se algo falhar, responde 422 e para aqui.
         $dados = $request->validate([
             'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
             'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
@@ -94,6 +112,7 @@ class ManutencaoController extends Controller
             'nf_chave_acesso.digits'      => 'A chave de acesso deve ter 44 números.',
             'nf_chave_acesso.unique'      => 'Esta nota fiscal já foi cadastrada.',
         ], ['caminhao_id' => 'caminhão', 'descricao' => 'descrição', 'km' => 'quilometragem']);
+        // ↑ 3º array = nomes amigáveis que trocam o ":attribute" nas mensagens.
 
         // Transação: grava a nota, a manutenção e o km do caminhão JUNTOS.
         // Se qualquer passo der erro, nada fica gravado pela metade.
@@ -101,6 +120,7 @@ class ManutencaoController extends Controller
             // lockForUpdate = trava a linha do caminhão até o fim da transação
             // (se duas pessoas registrarem ao mesmo tempo, uma espera a outra; o km não se perde).
             $caminhao = Caminhao::lockForUpdate()->findOrFail($dados['caminhao_id']);
+            // A manutenção fica no nome do motorista do caminhão; sem motorista, não dá para registrar.
             if (! $caminhao->motorista_id) {
                 throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não tem motorista responsável.']);
             }
@@ -123,15 +143,17 @@ class ManutencaoController extends Controller
                 ])->id;
             }
 
+            // forceCreate grava todos os campos, sem depender do "fillable" do model
+            // (o status não está no fillable de propósito: a tela nunca escolhe o status).
             Manutencao::forceCreate([
                 'caminhao_id'  => $caminhao->id,
                 'motorista_id' => $caminhao->motorista_id,
                 'data'         => $dados['data'],
                 'tipo'         => $dados['tipo'],
-                'descricao'    => $dados['descricao'] ?? null,
+                'descricao'    => $dados['descricao'] ?? null,   // "?? null" = se não veio, fica vazio
                 'valor'        => $dados['valor'],
                 'km'           => $dados['km'],
-                'nota_fiscal_id' => $notaId,
+                'nota_fiscal_id' => $notaId,                     // null se não tem nota
                 'status'       => 'aprovado',
             ]);
 
@@ -139,6 +161,7 @@ class ManutencaoController extends Controller
             $caminhao->update(['km_atual' => max((int) $caminhao->km_atual, (int) $dados['km'])]);
         });
 
+        // 201 = código HTTP "criado".
         return response()->json(['message' => 'Manutenção registrada.'], 201);
     }
 
@@ -202,8 +225,10 @@ class ManutencaoController extends Controller
     }
 
     // DELETE /api/manutencoes/{id} — a quilometragem do caminhão não volta atrás.
+    // "int $id" + whereNumber('id') na rota = só aceita número na URL.
     public function destroy(int $id): JsonResponse
     {
+        // Transação: apagar a manutenção e a nota dela acontecem juntos.
         DB::transaction(function () use ($id) {
             $manutencao = Manutencao::findOrFail($id);
             $notaId     = $manutencao->nota_fiscal_id; // guarda antes de apagar

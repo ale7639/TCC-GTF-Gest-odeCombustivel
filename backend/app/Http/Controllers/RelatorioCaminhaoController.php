@@ -1,5 +1,17 @@
 <?php
 
+// =====================================================================================
+// RelatorioCaminhaoController — relatório de UM caminhão (tela Relatórios > Caminhões).
+//
+// Rota (routes/api.php, grupo do admin):
+//   GET /api/relatorios/caminhoes/{caminhao}?dias=7|30|90|0  -> show()   (0 = todo o período)
+//
+// Devolve: dados do caminhão, um RESUMO (litros, km rodados, consumo km/L e gastos) e o
+// HISTÓRICO (linha do tempo com abastecimentos, manutenções, lavagens e outras notas).
+// Só entram lançamentos APROVADOS: um pendente ainda pode ser recusado.
+// Abastecimento fora da base aprovado entra no consumo e no gasto (custo = valor pago no posto).
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
@@ -18,6 +30,7 @@ use Illuminate\Support\Carbon;
 class RelatorioCaminhaoController extends Controller
 {
     // GET /api/relatorios/caminhoes/{caminhao}?dias=7|30|90|0   (0 = todo o período)
+    // "Caminhao $caminhao" = route model binding: id inexistente responde 404 sozinho.
     public function show(Request $request, Caminhao $caminhao): JsonResponse
     {
         $dias = (int) $request->query('dias', 30);
@@ -31,6 +44,8 @@ class RelatorioCaminhaoController extends Controller
         $tanques    = Tanque::pluck('nome', 'id');
 
         // ---- Abastecimentos aprovados (os pendentes ainda não "aconteceram") ----
+        // Em ordem de data crescente: o primeiro da lista é o mais antigo (importante para o consumo).
+        // when($inicio, ...) = só filtra a data se houver período (dias = 0 traz tudo).
         $abastecimentos = Abastecimento::where('caminhao_id', $caminhao->id)
             ->where('status', 'aprovado')
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
@@ -50,6 +65,7 @@ class RelatorioCaminhaoController extends Controller
 
         // ---- Outras notas fiscais do caminhão (peças, pneus, compra do veículo...) ----
         // As notas de manutenção ficam de fora daqui para o valor não ser contado duas vezes.
+        // whereDoesntHave('manutencoes') = notas que NÃO estão ligadas a nenhuma manutenção.
         $notas = NotaFiscal::where('caminhao_id', $caminhao->id)
             ->whereDoesntHave('manutencoes')
             ->when($inicio, fn ($q) => $q->where('data_emissao', '>=', $inicio))
@@ -58,16 +74,19 @@ class RelatorioCaminhaoController extends Controller
         // ---- Consumo: mesma regra dos outros relatórios ----
         // km rodados entre o primeiro e o último abastecimento ÷ litros (sem o primeiro, que repõe o
         // que foi gasto antes do período). Precisa de pelo menos 2 abastecimentos.
+        // Ex.: 10.000 km (300 L), 11.200 km (400 L), 12.500 km (450 L) -> 2.500 km ÷ 850 L = 2,94 km/L.
         $kmRodados       = $abastecimentos->count() > 1 ? $abastecimentos->max('km') - $abastecimentos->min('km') : 0;
         $litrosDoConsumo = $abastecimentos->count() > 1
             ? (float) $abastecimentos->sum('litros') - (float) $abastecimentos->first()->litros
             : 0;
 
+        // Gastos: combustível (custo gravado em cada abastecimento), manutenções e outras notas.
         $gastoCombustivel = (float) $abastecimentos->sum('custo_total');
         $gastoManutencao  = (float) $manutencoes->sum('valor');
         $gastoNotas       = (float) $notas->sum('valor_total');
 
         // ---- Linha do tempo: tudo junto, no mesmo formato ----
+        // Cada tipo vira um "item" igual (função item() no fim do arquivo), para a tela desenhar igual.
         $historico = collect();
 
         foreach ($abastecimentos as $a) {
@@ -77,6 +96,7 @@ class RelatorioCaminhaoController extends Controller
                     $a->origem === 'externo'
                         ? 'Fora da base · ' . ($a->posto ?: 'posto')
                         : 'Na base · ' . ($tanques[$a->tanque_id] ?? 'tanque'),
+                    // number_format(número, 0 casas, vírgula decimal, ponto de milhar) -> "80.250"
                     number_format((int) $a->km, 0, ',', '.') . ' km',
                     $motoristas[$a->motorista_id] ?? null,
                 ],
@@ -94,7 +114,7 @@ class RelatorioCaminhaoController extends Controller
             $historico->push($this->item('lavagem', $l->id, $l->data,
                 'Lavagem',
                 [$l->observacao, $motoristas[$l->motorista_id] ?? null],
-                $l->valor > 0 ? (float) $l->valor : null));
+                $l->valor > 0 ? (float) $l->valor : null));     // lavagem normalmente sem valor
         }
 
         foreach ($notas as $n) {
@@ -120,6 +140,7 @@ class RelatorioCaminhaoController extends Controller
                 'abastecimentos'    => $abastecimentos->count(),
                 'litros'            => round((float) $abastecimentos->sum('litros'), 2),
                 'km_rodados'        => $kmRodados,
+                // Sem dados suficientes (menos de 2 abastecimentos), o consumo vai como null ("—" na tela).
                 'consumo_km_l'      => ($litrosDoConsumo > 0 && $kmRodados > 0) ? round($kmRodados / $litrosDoConsumo, 2) : null,
                 'gasto_combustivel' => round($gastoCombustivel, 2),
                 'manutencoes'       => $manutencoes->count(),
@@ -130,11 +151,13 @@ class RelatorioCaminhaoController extends Controller
                 'gasto_total'       => round($gastoCombustivel + $gastoManutencao + $gastoNotas, 2),
             ],
             // Mais recente primeiro.
+            // Ordena por data e, na mesma data, pelo id (lançado por último aparece primeiro).
             'historico' => $historico->sortByDesc(fn ($i) => [$i['data'], $i['id']])->values(),
         ]);
     }
 
     // Um item da linha do tempo (mesmo formato para todos os tipos).
+    // $linhas = textos de detalhe (os vazios são retirados); $valor = R$ ou null.
     private function item(string $tipo, int $id, $data, string $titulo, array $linhas, ?float $valor): array
     {
         $d = Carbon::parse($data);
@@ -150,6 +173,7 @@ class RelatorioCaminhaoController extends Controller
         ];
     }
 
+    // Formata litros no padrão brasileiro sem zeros sobrando: 300.00 -> "300"; 185.50 -> "185,5".
     private static function litros($v): string
     {
         return rtrim(rtrim(number_format((float) $v, 2, ',', '.'), '0'), ',');

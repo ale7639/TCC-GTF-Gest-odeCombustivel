@@ -1,5 +1,19 @@
 <?php
 
+// =====================================================================================
+// RelatorioController — relatórios gerais da frota.
+//
+// Rotas (routes/api.php, grupo do admin):
+//   GET /api/relatorios/abastecimentos?dias=&tanque_id=  -> abastecimentos()  consumo por caminhão e litros por tanque
+//   GET /api/relatorios/motoristas?dias=                 -> motoristas()      o que cada motorista fez
+// (O relatório de um caminhão só fica no RelatorioCaminhaoController.)
+//
+// CONSUMO km/L — método do "tanque cheio" (cada abastecimento repõe o que foi gasto desde o anterior):
+//   consumo = (km do último abastecimento − km do primeiro) ÷ litros SEM contar o primeiro.
+//   O primeiro fica fora porque repõe o que foi gasto ANTES do período. Precisa de 2 abastecimentos.
+// Só entram abastecimentos APROVADOS (da base e de fora).
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
@@ -9,7 +23,7 @@ use App\Models\Motorista;
 use App\Models\Tanque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Schema;     // para perguntar se uma coluna existe na tabela
 
 class RelatorioController extends Controller
 {
@@ -29,6 +43,8 @@ class RelatorioController extends Controller
         }
 
         // TODOS os abastecimentos aprovados do período (base do cálculo de consumo).
+        // "caminhao.motorista" = relação dentro de relação (o motorista do caminhão).
+        // Ordem crescente de data: o primeiro de cada caminhão é o mais antigo.
         $todos = Abastecimento::where('status', 'aprovado')
             ->with(['caminhao:id,placa,modelo,motorista_id', 'caminhao.motorista:id,nome', 'tanque:id,nome'])
             ->when($dias > 0, fn ($q) => $q->where('data', '>=', now()->subDays($dias)->toDateString()))
@@ -41,6 +57,7 @@ class RelatorioController extends Controller
 
         // Consumo é do CAMINHÃO, não do tanque: usa todos os abastecimentos dele no período
         // (se usasse só os de um tanque, os litros dos outros ficariam de fora e o km/L sairia errado).
+        // groupBy('caminhao_id') = separa a lista em grupos, um por caminhão.
         $todosPorCaminhao = $todos->groupBy('caminhao_id');
 
         // Por caminhão: litros (do filtro), quilômetros rodados e consumo médio no período.
@@ -48,6 +65,7 @@ class RelatorioController extends Controller
             $primeiro   = $itens->first();
             $doCaminhao = $todosPorCaminhao->get($primeiro->caminhao_id);
 
+            // Maior km − menor km = quanto o caminhão rodou no período.
             $kmRodados = $doCaminhao->max('km') - $doCaminhao->min('km');
 
             // O primeiro abastecimento só repõe o que foi gasto ANTES do período,
@@ -66,9 +84,10 @@ class RelatorioController extends Controller
                     ? round($kmRodados / $litrosDoConsumo, 2)
                     : null,
             ];
-        })->sortByDesc('litros')->values();
+        })->sortByDesc('litros')->values();   // quem mais abasteceu primeiro
 
         // Por tanque: quanto saiu de cada um.
+        // whereNotNull('tanque_id') = ignora os de fora da base (não saíram de tanque).
         $porTanque = $abastecimentos->whereNotNull('tanque_id')->groupBy('tanque_id')->map(fn ($itens) => [
             'tanque_id'      => $itens->first()->tanque_id,
             'nome'           => $itens->first()->tanque->nome,
@@ -76,6 +95,8 @@ class RelatorioController extends Controller
             'litros'         => round((float) $itens->sum('litros'), 2),
         ])->sortByDesc('litros')->values();
 
+        // Média da frota = média dos consumos dos caminhões que têm consumo calculado.
+        // (Por isso um km digitado errado num caminhão distorce a média de todos.)
         $mediaFrota = $porCaminhao->whereNotNull('consumo_km_l')->avg('consumo_km_l');
 
         return response()->json([
@@ -104,6 +125,7 @@ class RelatorioController extends Controller
         }
         $inicio = $dias > 0 ? now()->subDays($dias)->toDateString() : null;
 
+        // Abastecimentos aprovados agrupados por motorista: [motorista_id => lista].
         $abastecimentos = Abastecimento::where('status', 'aprovado')
             ->with('caminhao:id,placa')
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
@@ -112,6 +134,7 @@ class RelatorioController extends Controller
             ->groupBy('motorista_id');
 
         // Lavagens: só filtra por data se a coluna "data" existir na tabela.
+        // (Proteção para bancos antigos; na estrutura atual a coluna existe.)
         $filtraLavagem = $inicio && Schema::hasColumn('lavagens', 'data');
         $lavagens = Lavagem::query()->where('status', 'aprovado')
             ->when($filtraLavagem, fn ($q) => $q->where('data', '>=', $inicio))
@@ -121,7 +144,9 @@ class RelatorioController extends Controller
             ->when($inicio, fn ($q) => $q->where('data', '>=', $inicio))
             ->get()->groupBy('motorista_id');
 
+        // Uma linha por motorista (inclusive os sem atividade no período).
         $lista = Motorista::orderBy('nome')->get()->map(function ($motorista) use ($abastecimentos, $lavagens, $manutencoes) {
+            // get(id, collect()) = os itens dele, ou lista vazia se não fez nada.
             $itens = $abastecimentos->get($motorista->id, collect());
 
             // Consumo: para cada caminhão que ele dirigiu, km rodados entre o primeiro e o último
@@ -129,7 +154,7 @@ class RelatorioController extends Controller
             $km = 0;
             $litrosConsumo = 0.0;
             foreach ($itens->groupBy('caminhao_id') as $doCaminhao) {
-                if ($doCaminhao->count() < 2) continue;
+                if ($doCaminhao->count() < 2) continue;   // com 1 só não dá para calcular
                 $km += $doCaminhao->max('km') - $doCaminhao->min('km');
                 $litrosConsumo += (float) $doCaminhao->sum('litros') - (float) $doCaminhao->first()->litros;
             }
@@ -139,6 +164,7 @@ class RelatorioController extends Controller
             return [
                 'motorista_id'   => $motorista->id,
                 'nome'           => $motorista->nome,
+                // Placas dos caminhões que ele abasteceu (sem repetir).
                 'placas'         => $itens->pluck('caminhao.placa')->unique()->values(),
                 'abastecimentos' => $itens->count(),
                 'litros'         => round((float) $itens->sum('litros'), 2),

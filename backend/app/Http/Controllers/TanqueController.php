@@ -1,11 +1,25 @@
 <?php
 
+// =====================================================================================
+// TanqueController — CRUD dos tanques de combustível da base.
+//
+// Rotas (routes/api.php, grupo do admin; Route::apiResource('tanques', ...)):
+//   GET    /api/tanques        -> index()   lista (o principal primeiro)
+//   POST   /api/tanques        -> store()   cadastra, com nível e custo iniciais opcionais
+//   GET    /api/tanques/{id}   -> show()
+//   PUT    /api/tanques/{id}   -> update()  altera nome, tipo, capacidade e "principal"
+//   DELETE /api/tanques/{id}   -> destroy() exclui só se nunca foi usado
+//
+// O NÍVEL e o VALOR DO ESTOQUE não são editados aqui: mudam só com as entradas (compras)
+// e os abastecimentos. Isso mantém o custo médio correto.
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Tanque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
+use Illuminate\Support\Arr;                 // Arr::only = copia só algumas chaves de um array
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -18,6 +32,7 @@ class TanqueController extends Controller
     public const TIPOS_COMBUSTIVEL = ['Diesel S10', 'Diesel S500', 'Gasolina comum', 'Gasolina aditivada', 'Etanol'];
 
     // GET /api/tanques — lista os tanques da empresa (o principal primeiro).
+    // O model Tanque acrescenta "custo_medio" em cada um (valor_estoque ÷ nivel_atual).
     public function index(): JsonResponse
     {
         return response()->json(Tanque::orderByDesc('principal')->orderBy('nome')->get());
@@ -27,6 +42,7 @@ class TanqueController extends Controller
     public function store(Request $request): JsonResponse
     {
         $dados = $this->validar($request);
+        // "?? 0" = se não veio nível inicial, começa vazio.
         $nivel = (float) ($dados['nivel_atual'] ?? 0);
 
         if ($nivel > (float) $dados['capacidade']) {
@@ -35,6 +51,7 @@ class TanqueController extends Controller
             ]);
         }
 
+        // Transação: desmarcar o principal antigo e criar o novo acontecem juntos.
         $tanque = DB::transaction(function () use ($dados, $nivel) {
             $principal = (bool) ($dados['principal'] ?? false);
 
@@ -49,6 +66,7 @@ class TanqueController extends Controller
                 'capacidade'       => $dados['capacidade'],
                 'nivel_atual'      => $nivel,
                 // Valor do combustível que já está no tanque: litros × custo por litro informado.
+                // É o ponto de partida do custo médio deste tanque.
                 'valor_estoque'    => round($nivel * (float) ($dados['custo_litro_inicial'] ?? 0), 4),
                 'principal'        => $principal,
             ]);
@@ -69,6 +87,7 @@ class TanqueController extends Controller
     {
         $dados = $this->validar($request, $tanque);
 
+        // Não dá para "encolher" o tanque para menos do que já tem dentro.
         if ((float) $dados['capacidade'] < (float) $tanque->nivel_atual) {
             throw ValidationException::withMessages([
                 'capacidade' => 'A capacidade não pode ser menor que o nível atual (' . (float) $tanque->nivel_atual . ' L).',
@@ -76,17 +95,21 @@ class TanqueController extends Controller
         }
 
         DB::transaction(function () use ($dados, $tanque) {
+            // Se este virou principal, desmarca os OUTROS (id diferente deste).
             if (! empty($dados['principal'])) {
                 Tanque::where('id', '!=', $tanque->id)->where('principal', true)->update(['principal' => false]);
             }
 
+            // Arr::only = só estes 4 campos são alterados (nível e custo inicial são ignorados).
             $tanque->update(Arr::only($dados, ['nome', 'tipo_combustivel', 'capacidade', 'principal']));
         });
 
+        // refresh() = recarrega do banco, para devolver os valores como ficaram gravados.
         return response()->json($tanque->refresh());
     }
 
     // DELETE /api/tanques/{id} — exclui, mas só se nunca foi usado.
+    // (Apagar um tanque com histórico deixaria abastecimentos e compras sem tanque.)
     public function destroy(Tanque $tanque): JsonResponse
     {
         if ($tanque->abastecimentos()->exists() || $tanque->entradas()->exists()) {
@@ -106,6 +129,7 @@ class TanqueController extends Controller
         return $request->validate([
             'nome' => [
                 'required', 'string', 'max:255',
+                // Nome único (ignorando o próprio tanque na alteração).
                 Rule::unique('tanques', 'nome')->ignore($tanque?->id),
             ],
             // Rule::in = só aceita um dos valores da lista TIPOS_COMBUSTIVEL (no topo da classe).
@@ -113,6 +137,7 @@ class TanqueController extends Controller
             // Capacidade é um número INTEIRO de litros, numa faixa realista de tanque de base.
             // (O nível pode ter casas decimais, porque é medido; a capacidade não.)
             'capacidade'       => ['required', 'integer', 'between:100,100000'],
+            // Só usados no cadastro (nível inicial e quanto custou cada litro desse nível).
             'nivel_atual'      => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'principal'        => ['nullable', 'boolean'],
             'custo_litro_inicial' => ['nullable', 'numeric', 'min:0', 'max:99999'],

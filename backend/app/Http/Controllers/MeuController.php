@@ -1,5 +1,20 @@
 <?php
 
+// =====================================================================================
+// MeuController — tudo o que o MOTORISTA faz no app (rotas com prefixo /api/meu).
+//
+// Rotas (routes/api.php, grupo protegido pelo middleware ApenasMotorista):
+//   GET  /api/meu/painel          -> painel()    o caminhão dele + histórico dos lançamentos
+//   GET  /api/meu/tanques         -> tanques()   tanques para escolher (sem nível e sem custo)
+//   POST /api/meu/abastecimentos  -> abastecer() fica PENDENTE até o admin aprovar
+//   POST /api/meu/lavagens        -> lavar()     vale na hora
+//   POST /api/meu/manutencoes     -> manter()    vale na hora
+//
+// SEGURANÇA: o motorista e o caminhão vêm do LOGIN (token), nunca do que o app envia.
+// O middleware ApenasMotorista confere o perfil e coloca o motorista logado em
+// $request->attributes ('motorista'); aqui só lemos de lá.
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
@@ -18,6 +33,8 @@ use Illuminate\Validation\ValidationException;
 // nunca do que o aplicativo envia: assim ninguém consegue lançar algo em nome de outro caminhão.
 class MeuController extends Controller
 {
+    // O caminhão do motorista logado. Para tudo (erro 422 com mensagem) se ele não tiver caminhão
+    // ou se o caminhão não estiver ativo. Usado por abastecer(), lavar() e manter().
     private function caminhaoDe($motorista): Caminhao
     {
         $caminhao = Caminhao::where('motorista_id', $motorista->id)->first();
@@ -35,10 +52,12 @@ class MeuController extends Controller
     // GET /api/meu/painel — o caminhão do motorista e o histórico dos lançamentos dele.
     public function painel(Request $request): JsonResponse
     {
+        // O motorista que o middleware ApenasMotorista encontrou pelo token.
         $motorista = $request->attributes->get('motorista');
         $caminhao  = Caminhao::where('motorista_id', $motorista->id)->first();
         $mapas     = Lancamentos::mapas();
 
+        // Junta os últimos 30 de cada tipo (abastecimento, lavagem, manutenção) DESTE motorista.
         $historico = collect();
         foreach (Lancamentos::TIPOS as $tipo) {
             Lancamentos::modelo($tipo)::where('motorista_id', $motorista->id)
@@ -48,6 +67,7 @@ class MeuController extends Controller
 
         return response()->json([
             'motorista' => ['id' => $motorista->id, 'nome' => $motorista->nome],
+            // Sem caminhão vinculado, manda null (a tela mostra o aviso).
             'caminhao'  => $caminhao ? [
                 'id'                => $caminhao->id,
                 'placa'             => $caminhao->placa,
@@ -56,11 +76,13 @@ class MeuController extends Controller
                 'capacidade_tanque' => (float) $caminhao->capacidade_tanque,
                 'status'            => $caminhao->status,
             ] : null,
+            // Mais recentes primeiro, no máximo 40.
             'historico' => $historico->sortByDesc('ordem')->take(40)->values(),
         ]);
     }
 
     // GET /api/meu/tanques — só nome e combustível (o motorista não vê níveis nem custos).
+    // get([...colunas]) = traz só essas colunas do banco.
     public function tanques(): JsonResponse
     {
         return response()->json(
@@ -80,10 +102,13 @@ class MeuController extends Controller
             'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'litros'      => ['required', 'numeric', 'min:1', 'max:99999'],
             'km'          => ['required', 'integer', 'min:0'],
+            // required_if:origem,base = obrigatório SE a origem for "base".
             'tanque_id'   => ['required_if:origem,base', 'nullable', 'integer', 'exists:tanques,id'],
+            // Os três abaixo só valem fora da base (posto).
             'posto'       => ['required_if:origem,externo', 'nullable', 'string', 'max:120'],
             'valor_total' => ['required_if:origem,externo', 'nullable', 'numeric', 'min:0.01', 'max:9999999'],
             'nota_numero' => ['nullable', 'string', 'max:30'],
+            // Foto opcional: precisa ser imagem jpg/png/webp de até 5 MB (5120 KB).
             'foto'        => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ], [
             'required'             => 'Preencha o campo :attribute.',
@@ -99,6 +124,7 @@ class MeuController extends Controller
             'km'          => 'quilometragem',
         ]);
 
+        // Não cabe mais do que o tanque do caminhão comporta.
         if ((float) $dados['litros'] > (float) $caminhao->capacidade_tanque) {
             throw ValidationException::withMessages([
                 'litros' => 'O tanque do seu caminhão comporta no máximo ' . (float) $caminhao->capacidade_tanque . ' L.',
@@ -109,6 +135,7 @@ class MeuController extends Controller
 
         $externo = $dados['origem'] === 'externo';
 
+        // Os campos que não fazem sentido para a origem escolhida ficam null.
         Abastecimento::create([
             'caminhao_id'  => $caminhao->id,
             'motorista_id' => $motorista->id,
@@ -120,6 +147,8 @@ class MeuController extends Controller
             'posto'        => $externo ? $dados['posto'] : null,
             'nota_numero'  => $externo ? ($dados['nota_numero'] ?? null) : null,
             'valor_total'  => $externo ? $dados['valor_total'] : null,
+            // store('abastecimentos', 'local') salva o arquivo na pasta PRIVADA storage/app/abastecimentos
+            // e devolve o caminho, que é o que vai para a coluna "foto".
             'foto'         => ($externo && $request->hasFile('foto'))
                 ? $request->file('foto')->store('abastecimentos', 'local')
                 : null,
@@ -167,6 +196,7 @@ class MeuController extends Controller
             'data'      => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'tipo'      => ['required', 'string', 'max:255'],
             'descricao' => ['nullable', 'string', 'max:1000'],
+            // min:0 = aceita zero (sem custo), mas não negativo.
             'valor'     => ['required', 'numeric', 'min:0', 'max:9999999'],
             'km'        => ['required', 'integer', 'min:0'],
         ], [
