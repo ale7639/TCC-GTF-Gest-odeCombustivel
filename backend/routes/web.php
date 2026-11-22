@@ -26,9 +26,9 @@ Route::get('/', function () {
   <main>
     <p style="letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:#6b7280;font-family:sans-serif;">Backend Laravel</p>
     <h1>GFC API no ar</h1>
-    <p>Esta porta é só a API. O aplicativo abre em <a href="{$frontend}">{$frontend}</a>.</p>
+    <p>Esta porta é só a API. O aplicativo Expo abre em <a href="{$frontend}">{$frontend}</a> (ou :8082 se a 8081 estiver ocupada).</p>
     <p>Para ver as tabelas no navegador, use o phpMyAdmin: <a href="http://localhost:8081">http://localhost:8081</a> (usuário <code>root</code>, senha <code>secret</code>).</p>
-    <p>Se o frontend não abrir, rode <code>npm run dev</code> na pasta <code>frontend</code>.</p>
+    <p>Se o app não abrir, rode <code>npx expo start --web</code> na pasta <code>mobile</code>.</p>
   </main>
 </body>
 </html>

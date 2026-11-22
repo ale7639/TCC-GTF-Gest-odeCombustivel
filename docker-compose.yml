@@ -33,7 +33,7 @@ services:
       APP_DEBUG: "true"
       APP_KEY: base64:E2w4HhyJUQhGLM5JV9Cd9NKDDCgtYPJo7quCb65mnEE=
       APP_URL: http://localhost:8000
-      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URL: http://localhost:8081
       APP_LOCALE: pt_BR
       APP_FALLBACK_LOCALE: pt_BR
       APP_FAKER_LOCALE: pt_BR
@@ -48,7 +48,7 @@ services:
       CACHE_STORE: file
       QUEUE_CONNECTION: sync
       FILESYSTEM_DISK: public
-      SANCTUM_STATEFUL_DOMAINS: localhost:5173,127.0.0.1:5173
+      SANCTUM_STATEFUL_DOMAINS: localhost:8081,127.0.0.1:8081,localhost:8082,127.0.0.1:8082
     volumes:
       - ./backend:/var/www/html
       - gfc_vendor:/var/www/html/vendor

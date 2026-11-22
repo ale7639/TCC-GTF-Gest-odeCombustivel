@@ -1,27 +1,39 @@
 # GFC — Gestão de Combustível e Frota
 
-Pré-projeto de TCC (Laravel API + React + Docker). O Compose **não** sobe o React.
+Pré-projeto de TCC: **Expo** (`mobile/`) + **Laravel API** (`backend/`) + **MySQL no Docker**.
+
+A UI oficial é o app Expo (web no PC e telefone). Não há mais pasta `frontend/` (Vite/React).
 
 ```bash
 docker compose up -d --build
-cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173
+cd backend && composer install && php artisan migrate --seed
+cd ../mobile && npm install && npx expo start --web
 ```
 
-- App: http://127.0.0.1:5173
-- API: http://127.0.0.1:8000
+### Portas (o que o compose/scripts usam)
+
+| Serviço | Compose / padrão | Alternativa na prática |
+|---|---|---|
+| API Laravel | **8000** (`app` no compose, ou `php artisan serve`) | **8002** se a 8000 estiver ocupada |
+| Expo (web/Metro) | **8081** (`npx expo start`) | **8082** se a 8081 estiver ocupada (ex.: phpMyAdmin) |
+| MySQL | **3306** (`127.0.0.1:3306`) | **3308** (ou `3307` no `.env.example` Wallace) se a 3306 estiver no XAMPP |
+| phpMyAdmin | **8081** (`root` / `secret`) | — |
+
+- App Expo: http://127.0.0.1:8081 (ou :8082)
+- API: http://127.0.0.1:8000 (ou :8002)
 - phpMyAdmin: http://127.0.0.1:8081 (`root` / `secret`)
 
-Contas de seed, sem atalhos de papel na tela:
+### Contas de seed (Wallace)
 
 | Papel | Entrada | Identificador | Senha |
 |---|---|---|---|
-| Administrador | e-mail | `diego@gfc.com.br` (layout web) | `Senha123` |
-| Supervisor | e-mail | `ana@gfc.com.br` (mobile) | `Senha123` |
-| Motorista | **CPF** | `111.111.111-11` — João Santos (mobile) | **`11111111111`** (CPF só dígitos) |
+| Administrador | e-mail | `admin@frota.com` | `admin123` |
+| Motorista | **CPF** | ex. `548.617.700-33` — Carlos Eduardo Silva (seed determinístico) | `motorista123` |
 
-Motorista autentica pelo CPF da ficha (`motoristas.cpf`). Senha inicial = CPF em dígitos. “Esqueci minha senha” notifica o administrador no sino.
+Motorista autentica pelo CPF da ficha (`motoristas.cpf`), não por e-mail. “Esqueci minha senha” aciona o fluxo do app (WhatsApp do admin / notificação).
 
-A pasta `mobile/` é o Expo da base do Wallace; a demo da banca é o frontend web.
+---
+
 # Fluxo de Trabalho do Projeto
 
 ## Objetivo
@@ -249,25 +261,28 @@ Seguindo este fluxo de trabalho, a equipe garante:
 
 # GFC — Gestão de Combustível e Frota
 
-Sistema mobile-first e web para a Transportadora parceira da UNIALFA: controle de tanque, abastecimento, frota, manutenção, lavagem, relatórios e alertas.
+Sistema mobile-first (Expo web + telefone) para a Transportadora parceira da UNIALFA: controle de tanque, abastecimento, frota, manutenção, lavagem, relatórios e alertas.
 
-O código segue o documento de TCC (sprints, regras de negócio e casos de teste), com estrutura de um desenvolvedor pleno/júnior: claro, organizado e sem overengineering.
+O código segue o documento de TCC (sprints, regras de negócio e casos de teste), com estrutura clara e sem overengineering.
 
 ## Stack
 
-- Backend: PHP 8.2+ · Laravel 11 · API REST · Laravel Sanctum
-- Frontend: React 18 · Vite · PWA (instalável no celular)
-- Banco: MySQL 8
+- UI: Expo / React Native (`mobile/`) — web no PC e app no telefone
+- Backend: PHP 8.2+ · Laravel · API REST · Laravel Sanctum (`backend/`)
+- Banco: MySQL 8 (Docker Compose)
 
 ## Perfis (RN)
 
 | Perfil | Acesso |
 |---|---|
-| Administrador | Tudo, inclusive cadastro/edição/exclusão de caminhões e usuários |
-| Supervisor | Operação: checklist, manutenção, lavagem, abastecimento, relatórios e alertas |
-| Motorista | Dashboard, frota (consulta), abastecer e lavagem. Sem relatórios e sem exclusão |
+| Administrador | Tudo: frota, motoristas, tanques, abastecimentos, relatórios |
+| Motorista | Área do motorista (abastecimento, checklist, etc.). Sem gestão de frota |
 
-## Como rodar (Docker)
+Login: **admin por e-mail**; **motorista por CPF**.
+
+## Como rodar
+
+### 1) Docker (MySQL + API + phpMyAdmin)
 
 Na pasta do projeto:
 
@@ -275,25 +290,25 @@ Na pasta do projeto:
 docker compose up -d --build
 ```
 
-- App (telas de login e dashboard): http://localhost:5173
-- API: http://localhost:8000 — página de status. O sistema em si não abre nesta porta.
-- Banco (phpMyAdmin): http://localhost:8081
+O `docker-compose.yml` sobe:
 
-O MySQL do Docker **não tem tela própria**. O phpMyAdmin é o jeito mais simples de administrar as tabelas.
+- **MySQL** em `127.0.0.1:3306` (banco `gfc`, user `root` / `secret`)
+- **API Laravel** (Apache no container) em http://localhost:8000
+- **phpMyAdmin** em http://localhost:8081
 
-| Campo | Valor |
+Alternativa comum na banca: Compose só para MySQL e API com `php artisan serve` (porta 8000 ou 8002).
+
+| Campo | Valor (compose) |
 |---|---|
-| Host (HeidiSQL / DBeaver / Workbench) | `127.0.0.1` — não use `mysql` nem `localhost` se falhar |
-| Porta | `3306` |
+| Host (HeidiSQL / DBeaver / Workbench) | `127.0.0.1` |
+| Porta | `3306` (ou `3308` / `3307` se remapear) |
 | Banco | `gfc` |
 | Usuário | `root` |
 | Senha | `secret` |
 
-No phpMyAdmin isso já vem preenchido. No Workbench, se pedir SSL, use a opção de conexão sem SSL.
+Se a porta 3306 já estiver ocupada pelo XAMPP, pare o MySQL do XAMPP ou remapeie a porta no compose.
 
-Se a porta 3306 já estiver ocupada pelo XAMPP, feche o MySQL do XAMPP ou o Docker não consegue expor o banco.
-
-### Alternativa: MySQL no Docker e Laravel no computador
+### 2) API no computador (sem container `app`)
 
 Requisitos: PHP 8.2+ com extensões `openssl`, `pdo_mysql`, `mbstring`, `tokenizer`, `xml`, `curl`, `fileinfo` e Composer.
 
@@ -304,7 +319,7 @@ composer install
 php artisan key:generate
 ```
 
-Ajuste o `.env` se o MySQL não for `root` sem senha:
+Ajuste o `.env` para o MySQL do compose:
 
 ```
 DB_CONNECTION=mysql
@@ -312,7 +327,7 @@ DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=gfc
 DB_USERNAME=root
-DB_PASSWORD=
+DB_PASSWORD=secret
 ```
 
 Depois:
@@ -320,19 +335,22 @@ Depois:
 ```bash
 php artisan migrate --seed
 php artisan serve
+# ou, se 8000 estiver ocupada:
+php artisan serve --port=8002
 ```
 
-API em `http://127.0.0.1:8000`.
+API em `http://127.0.0.1:8000` (ou `:8002`).
 
-### Frontend (React)
+### 3) App Expo (`mobile/`)
 
 ```bash
-cd frontend
+cd mobile
 npm install
-npm run dev
+npx expo start --web
+# telefone na mesma rede: npx expo start  (QR / Expo Go)
 ```
 
-App em `http://localhost:5173`. No computador ele aparece como um celular; no telefone ocupa a tela toda.
+App web em `http://localhost:8081` (Expo sobe em **8082** se a 8081 estiver ocupada). Ajuste `mobile/src/config.js` (`API_URL` / IP da máquina) para apontar à API.
 
 ### Alertas automáticos
 
@@ -346,42 +364,32 @@ php artisan schedule:work
 
 ## Contas de demonstração
 
-Senha de todos: `Senha123`
+| Perfil | Entrada | Senha |
+|---|---|---|
+| Administrador | `admin@frota.com` | `admin123` |
+| Motorista | CPF do seed (ex. Carlos `548.617.700-33`) | `motorista123` |
 
-| Perfil | E-mail |
-|---|---|
-| Administrador | diego@gfc.com.br |
-| Supervisor | ana@gfc.com.br |
-| Motorista | joao@gfc.com.br |
-
-Na tela de login há atalhos para preencher cada perfil.
+CPFs dos motoristas vêm do `DemonstracaoSeeder` (semente `mt_srand(2026)`), estáveis após `migrate --seed`.
 
 ## Segurança (qualidade de uso real)
 
-- Senha com bcrypt (12 rounds), nunca em texto puro
-- Token Sanctum com validade de 24 horas
-- Mensagem genérica de login (não revela se o e-mail existe)
-- Bloqueio da conta após 5 tentativas, por 15 minutos
-- Recuperação de senha: mesma resposta para e-mail existente ou não, link de 1 hora, máximo 3 pedidos por IP/hora
-- Abastecimento em transação (débito do tanque + registro juntos)
-- Soft delete de caminhão, com auditoria (usuário, data, IP)
+- Senha com bcrypt, nunca em texto puro
+- Token Sanctum
+- Mensagem genérica de login (não revela se o identificador existe)
 - Perfis validados no servidor, não só no menu
-- Validação de placa (AAA-9999 e Mercosul) no frontend e no backend
-
-## Tipografia e visual
-
-- **DM Sans** — interface, leitura e formulários
-- **Barlow Condensed** — placas, litros e indicadores (tipologia operacional de pátio)
-- Paleta diesel / asfalto / âmbar de combustível, com ícone + cor nos status (acessível para daltonismo)
+- Abastecimento em transação (débito do tanque + registro juntos)
+- Soft delete de caminhão, com auditoria quando aplicável
+- Validação de placa (AAA-9999 e Mercosul) no app e no backend
 
 ## Estrutura
 
 ```
 backend/     API Laravel
-frontend/    App React mobile-first
+mobile/      App Expo (web + telefone)
+docker-compose.yml   MySQL (+ API e phpMyAdmin no compose padrão)
 ```
 
-Regras de negócio principais ficam em `app/Services` (`FuelingService`, `ChecklistService`, `AlertService`) e nas Form Requests.
+Regras de negócio principais ficam em `backend/app` (controllers/services) e nas Form Requests.
 
 ## Testes
 
