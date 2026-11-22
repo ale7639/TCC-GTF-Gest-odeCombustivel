@@ -11,25 +11,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import SeletorLista from '../components/SeletorLista';
-import EstadoVazio from '../ui/EstadoVazio';
-import Esqueleto from '../ui/Esqueleto';
-import MensagemErro from '../ui/MensagemErro';
-import { useToast } from '../ui/Toast';
-import {
-  cartaoBase,
-  RAIO_BOTAO,
-  RAIO_CAMPO,
-  sombraSuave,
-  VERMELHO,
-  VERMELHO_SUAVE,
-  VERDE,
-  TEXTO,
-  TEXTO_SUAVE,
-} from '../ui/tema';
+import SeletorCaminhao from '../components/SeletorCaminhao';
+import Moldura from '../ui/Moldura';
+import { cores } from '../ui/tema';
 
 // ABASTECIMENTO — lista filtrada + formulário (base) do admin.
 
@@ -103,79 +90,17 @@ function Chip({ texto, ativo, aoTocar }) {
   );
 }
 
-// Cartão de nível (atual ou projetado) — layout do print: litros grandes + % + barra.
-function NivelTanque({ titulo, litros, capacidade, tom = 'atual', alerta = false }) {
-  const pct = capacidade > 0 ? Math.min(100, (litros / capacidade) * 100) : null;
-  const corBarra = alerta ? '#b91c1c' : tom === 'depois' ? VERDE : VERMELHO;
-
+// Uma linha "rótulo ........ valor" do resumo de confirmação.
+function LinhaResumo({ rotulo, valor }) {
   return (
-    <View style={styles.nivelCard} accessibilityRole="summary">
-      <Text style={styles.nivelTitulo}>{titulo}</Text>
-      <View style={styles.nivelTopo}>
-        <Text style={[styles.nivelLitros, tom === 'depois' && !alerta && { color: VERDE }]}>
-          {litrosFmt(litros)} L
-        </Text>
-        {pct != null ? (
-          <Text style={[styles.nivelPct, tom === 'depois' && !alerta && { color: VERDE }]}>
-            {pct.toFixed(0)}%
-          </Text>
-        ) : null}
-      </View>
-      {pct != null ? (
-        <View style={styles.nivelBarraFundo}>
-          <View style={[styles.nivelBarra, { width: `${pct}%`, backgroundColor: corBarra }]} />
-        </View>
-      ) : null}
+    <View style={styles.linhaResumo}>
+      <Text style={styles.linhaResumoRotulo}>{rotulo}</Text>
+      <Text style={styles.linhaResumoValor}>{valor}</Text>
     </View>
   );
 }
 
-// Stepper − / valor / + (print: Quantidade a abastecer).
-function StepperLitros({ valor, aoMudar, maximo }) {
-  const n = Number(String(valor).replace(',', '.'));
-  const atual = Number.isFinite(n) && n > 0 ? n : 0;
-
-  const aplicar = (prox) => {
-    const limitado = Math.max(0, maximo != null ? Math.min(prox, maximo) : prox);
-    aoMudar(limitado > 0 ? String(Math.round(limitado)) : '');
-  };
-
-  return (
-    <View style={styles.grupo}>
-      <Text style={styles.rotulo}>Quantidade a abastecer</Text>
-      <View style={styles.stepper}>
-        <Pressable
-          onPress={() => aplicar(atual - PASSO_LITROS)}
-          style={({ pressed }) => [styles.stepperBtn, pressed && { opacity: 0.85 }]}
-          accessibilityLabel="Diminuir litros"
-        >
-          <Text style={styles.stepperBtnTexto}>−</Text>
-        </Pressable>
-        <TextInput
-          style={styles.stepperCampo}
-          value={valor}
-          onChangeText={aoMudar}
-          keyboardType="decimal-pad"
-          placeholder="0"
-          textAlign="center"
-        />
-        <Pressable
-          onPress={() => aplicar(atual + PASSO_LITROS)}
-          style={({ pressed }) => [styles.stepperBtn, pressed && { opacity: 0.85 }]}
-          accessibilityLabel="Aumentar litros"
-        >
-          <Text style={styles.stepperBtnTexto}>+</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.stepperDica}>Passo de {PASSO_LITROS} L · ou digite o valor</Text>
-    </View>
-  );
-}
-
-// embutido: lista dentro de Gestão de Tanques (sem cabeçalho próprio / formulário de novo).
-// ABASTECIMENTO
-export default function Abastecimentos({ embutido = false }) {
-  const toast = useToast();
+export default function Abastecimentos() {
   const [abastecimentos, setAbastecimentos] = useState([]); // itens já carregados (acumulam ao "carregar mais")
   const [pagina, setPagina] = useState(1);
   const [ultimaPagina, setUltimaPagina] = useState(1);
@@ -198,6 +123,7 @@ export default function Abastecimentos({ embutido = false }) {
   const [formAberto, setFormAberto] = useState(false);
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
+  const [confirmacao, setConfirmacao] = useState(null); // resumo mostrado antes de gravar
   const [erroForm, setErroForm] = useState(null);
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
   const [resumoOk, setResumoOk] = useState(null); // sucesso pós-confirmação (print)
@@ -258,56 +184,49 @@ export default function Abastecimentos({ embutido = false }) {
   // Só caminhões ativos e com motorista responsável podem ser abastecidos.
   const caminhoesDisponiveis = caminhoes.filter((c) => c.status === 'ativo' && c.motorista_id);
 
-  const mudar = (campo, valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
-
-  // Ao escolher o caminhão, já sugere a quilometragem atual dele.
-  const escolherCaminhao = (id) => {
-    const c = caminhoesDisponiveis.find((x) => x.id === id);
-    setForm((atual) => ({
-      ...atual,
-      caminhao_id: id,
-      km: c ? String(c.km_atual) : atual.km}));
+  // Qualquer mudança no formulário cancela o resumo (precisa conferir de novo).
+  const mudar = (campo, valor) => {
+    setConfirmacao(null);
+    setForm((atual) => ({ ...atual, [campo]: valor }));
   };
 
-  const opcoesCaminhao = caminhoesDisponiveis.map((c) => ({
-    valor: c.id,
-    rotulo: `${c.placa} · ${c.modelo}${c.motorista?.nome ? ` · ${c.motorista.nome}` : ''}`}));
-
-  const opcoesTanque = tanques.map((t) => ({
-    valor: t.id,
-    rotulo: `${t.nome} · ${t.tipo_combustivel} (${litrosFmt(t.nivel_atual)} L)`}));
-
-  const opcoesTanqueFiltro = [
-    { valor: null, rotulo: 'Todos os tanques' },
-    ...tanques.map((t) => ({ valor: t.id, rotulo: t.nome })),
-  ];
-
-  const tanqueForm = tanques.find((t) => t.id === form.tanque_id);
-  const caminhaoForm = caminhoesDisponiveis.find((c) => c.id === form.caminhao_id);
-  const litrosForm = Number(String(form.litros).replace(',', '.'));
-  const nivelAtual = tanqueForm ? Number(tanqueForm.nivel_atual) || 0 : 0;
-  const capacidadeTanque = tanqueForm ? Number(tanqueForm.capacidade) || 0 : 0;
-  const nivelDepois = Math.max(0, nivelAtual - (litrosForm > 0 ? litrosForm : 0));
-  const insuficiente = litrosForm > 0 && litrosForm > nivelAtual;
-
-  const ultimoDoCaminhao = form.caminhao_id
-    ? abastecimentos.find((a) => a.caminhao?.id === form.caminhao_id || a.caminhao_id === form.caminhao_id)
-    : null;
+  // Ao escolher o caminhão, já sugere a quilometragem atual dele.
+  const escolherCaminhao = (c) => {
+    setConfirmacao(null);
+    setForm((atual) => ({ ...atual, caminhao_id: c.id, km: String(c.km_atual) }));
+  };
 
   const abrirNovo = () => {
     setForm(formVazio());
     setErroForm(null);
-    setResumoOk(null);
+    setConfirmacao(null);
     setFormAberto(true);
   };
 
   const fechar = () => {
     setFormAberto(false);
     setErroForm(null);
-    setResumoOk(null);
+    setConfirmacao(null);
   };
 
-  const salvar = async () => {
+  // Veio do botão "Abastecer caminhão" do Painel: já abre o formulário.
+  const rota = useRoute();
+  useEffect(() => {
+    if (rota.params?.novo) abrirNovo();
+  }, [rota.params?.novo]);
+
+  // Veio de um cartão do Relatório: aplica a placa, o período e o tanque que estavam lá.
+  useEffect(() => {
+    const f = rota.params?.filtro;
+    if (!f) return;
+    setBusca(f.busca ?? '');
+    setBuscaAplicada(f.busca ?? ''); // aplica na hora, sem esperar a pausa de digitação
+    setDias(f.dias ?? 30);
+    setTanqueFiltro(f.tanqueId ?? null);
+  }, [rota.params?.filtro]);
+
+  // Passo 1 ("Registrar"): confere os campos e mostra o resumo para o usuário confirmar.
+  const revisar = () => {
     const litros = Number(String(form.litros).replace(',', '.'));
     const km = Number(form.km);
     const data = paraISO(form.data);
@@ -329,26 +248,35 @@ export default function Abastecimentos({ embutido = false }) {
       return;
     }
 
+    const caminhao = caminhoes.find((c) => c.id === form.caminhao_id);
+    const tanque = tanques.find((t) => t.id === form.tanque_id);
+    const custoMedio = tanque?.custo_medio != null ? Number(tanque.custo_medio) : null;
+
+    setErroForm(null);
+    setConfirmacao({
+      corpo: { caminhao_id: form.caminhao_id, tanque_id: form.tanque_id, litros, km, data },
+      caminhao: caminhao ? `${caminhao.placa} · ${caminhao.motorista?.nome ?? ''}` : '',
+      tanque: tanque ? tanque.nome : '',
+      litros,
+      km,
+      data: form.data,
+      sobraNoTanque: tanque ? Number(tanque.nivel_atual) - litros : null,
+      custoEstimado: custoMedio != null ? litros * custoMedio : null,
+    });
+  };
+
+  // Passo 2 ("Confirmar abastecimento"): grava de verdade.
+  const confirmar = async () => {
     setSalvando(true);
     setErroForm(null);
     try {
-      await api('/abastecimentos', {
-        metodo: 'POST',
-        corpo: { caminhao_id: form.caminhao_id, tanque_id: form.tanque_id, litros, km, data }});
-      setResumoOk({
-        placa: caminhaoForm?.placa ?? '—',
-        modelo: caminhaoForm?.modelo ?? '',
-        tanque: tanqueForm?.nome ?? '—',
-        litros,
-        nivelAntes: nivelAtual,
-        nivelDepois: Math.max(0, nivelAtual - litros),
-        data: form.data,
-        km});
-      toast.sucesso('Abastecimento registrado.');
+      await api('/abastecimentos', { metodo: 'POST', corpo: confirmacao.corpo });
+      fechar();
       carregarApoio();
       await carregarLista(1);
     } catch (e) {
       setErroForm(mensagemDe(e));
+      setConfirmacao(null); // volta ao formulário para corrigir o que o servidor recusou
     } finally {
       setSalvando(false);
     }
@@ -450,361 +378,198 @@ export default function Abastecimentos({ embutido = false }) {
           </>
         )}
 
-        {!carregando && (
-          <FlatList
-            data={abastecimentos}
-            keyExtractor={(item) => String(item.id)}
-            ListHeaderComponent={filtros}
-            refreshControl={
-              <RefreshControl
-                refreshing={atualizando}
-                onRefresh={() => {
-                  setAtualizando(true);
-                  carregarApoio();
-                  carregarLista(1);
-                }}
-                tintColor="#dc2626"
+      {/* Formulário de novo abastecimento */}
+      <Modal visible={formAberto} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
+        <ScrollView
+          style={styles.tela}
+          contentContainerStyle={styles.formConteudo}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Cabecalho titulo="Novo abastecimento" aoVoltar={fechar} />
+
+          <Text style={styles.rotulo}>Caminhão</Text>
+          <SeletorCaminhao
+            caminhoes={caminhoesDisponiveis}
+            selecionadoId={form.caminhao_id}
+            aoEscolher={escolherCaminhao}
+            vazio="Nenhum caminhão ativo com motorista responsável."
+          />
+
+          <Text style={styles.rotulo}>Tanque de origem</Text>
+          <View style={styles.opcoes}>
+            {tanques.map((t) => (
+              <Opcao
+                key={t.id}
+                texto={`${t.nome} · ${t.tipo_combustivel} (${litrosFmt(t.nivel_atual)} L)`}
+                ativo={form.tanque_id === t.id}
+                aoTocar={() => mudar('tanque_id', t.id)}
               />
-            }
-            ListEmptyComponent={
-              !erro ? (
-                <EstadoVazio
-                  icone="gas-station-outline"
-                  titulo={
-                    buscaAplicada || tanqueFiltro
-                      ? 'Nenhum abastecimento neste filtro'
-                      : 'Nenhum abastecimento no período'
-                  }
-                  dica={
-                    embutido
-                      ? 'Quando houver saídas neste tanque, elas aparecem aqui.'
-                      : 'Toque em + Novo para registrar um abastecimento.'
-                  }
-                />
-              ) : null
-            }
-            ListFooterComponent={
-              pagina < ultimaPagina ? (
-                <Pressable
-                  style={({ pressed }) => [styles.maisBotao, pressed && { opacity: 0.85 }]}
-                  disabled={carregandoMais}
-                  onPress={() => {
-                    setCarregandoMais(true);
-                    carregarLista(pagina + 1);
-                  }}
-                >
-                  {carregandoMais ? (
-                    <ActivityIndicator color="#dc2626" />
-                  ) : (
-                    <Text style={styles.maisTexto}>
-                      Carregar mais ({abastecimentos.length} de {total})
-                    </Text>
-                  )}
-                </Pressable>
-              ) : null
-            }
-            contentContainerStyle={{ paddingBottom: 88 }}
-            renderItem={({ item }) => (
-              <View style={styles.caixa}>
-                <View style={styles.topo}>
-                  <Text style={styles.principal}>
-                    {item.caminhao.placa} · {litrosFmt(item.litros)} L
-                  </Text>
-                  <Pressable
-                    onPress={() => excluir(item.id)}
-                    hitSlop={8}
-                    style={({ pressed }) => [styles.excluirBtn, pressed && { opacity: 0.75 }]}
-                  >
-                    <Text style={[styles.excluir, confirmandoId === item.id && styles.excluirAtivo]}>
-                      {confirmandoId === item.id ? 'Confirmar' : 'Excluir'}
-                    </Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.detalhe}>
-                  {item.motorista.nome} ·{' '}
-                  {item.tanque ? item.tanque.nome : `Fora da base · ${item.posto ?? 'posto'}`}
-                </Text>
-                <Text style={styles.detalhe}>
-                  {dataBR(item.data)} · {numero(item.km)} km
-                </Text>
-                {item.nota_numero ? <Text style={styles.detalhe}>NF {item.nota_numero}</Text> : null}
-                {item.custo_litro != null && (
-                  <Text style={styles.detalhe}>
-                    Custo: {moedaL(item.custo_litro)} · total {moeda(item.custo_total)}
-                  </Text>
-                )}
-                <Text style={styles.consumo}>
-                  {item.consumo_km_l != null
-                    ? `${consumoFmt(item.consumo_km_l)} km/L · ${numero(item.km_rodados)} km desde o anterior`
-                    : 'Consumo: sem registro anterior para comparar'}
-                </Text>
-              </View>
-            )}
+            ))}
+          </View>
+
+          <Campo
+            rotulo="Litros"
+            value={form.litros}
+            onChangeText={(v) => mudar('litros', v)}
+            keyboardType="decimal-pad"
+          />
+          <Campo
+            rotulo="Quilometragem do caminhão"
+            value={form.km}
+            onChangeText={(v) => mudar('km', v)}
+            keyboardType="numeric"
+          />
+          <Campo
+            rotulo="Data (dd/mm/aaaa)"
+            value={form.data}
+            onChangeText={(v) => mudar('data', v)}
+            maxLength={10}
           />
         )}
       </View>
 
-      {/* Formulário alinhado ao print: caminhão → nível → stepper → projetado → confirmar */}
-      {!embutido && (
-        <Modal visible={formAberto} animationType="slide" onRequestClose={fechar}>
-          <ScrollView
-            style={styles.tela}
-            contentContainerStyle={styles.formConteudo}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Cabecalho
-              titulo={resumoOk ? 'Abastecimento ok' : 'Abastecer caminhão'}
-              aoVoltar={fechar}
-              sangrar
-            />
+          {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
-            {resumoOk ? (
-              <View style={styles.sucessoCard}>
-                <Text style={styles.sucessoTitulo}>Abastecimento confirmado</Text>
-                <Text style={styles.sucessoPlaca}>
-                  {resumoOk.placa}
-                  {resumoOk.modelo ? ` · ${resumoOk.modelo}` : ''}
-                </Text>
-                <Text style={styles.sucessoLinha}>
-                  {litrosFmt(resumoOk.litros)} L · {resumoOk.tanque}
-                </Text>
-                <Text style={styles.sucessoLinha}>
-                  Estoque: {litrosFmt(resumoOk.nivelAntes)} L → {litrosFmt(resumoOk.nivelDepois)} L
-                </Text>
-                <Text style={styles.sucessoMeta}>
-                  {resumoOk.data} · {numero(resumoOk.km)} km
-                </Text>
-                <Pressable
-                  style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]}
-                  onPress={fechar}
-                >
-                  <Text style={styles.botaoTexto}>Concluir</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <>
-                <SeletorLista
-                  rotulo="Selecione o caminhão"
-                  valor={form.caminhao_id}
-                  opcoes={opcoesCaminhao}
-                  aoMudar={escolherCaminhao}
-                  placeholder="Escolher caminhão…"
-                  placeholderBusca="Buscar placa ou motorista…"
-                  vazio="Nenhum caminhão ativo com motorista responsável."
-                />
+          {!confirmacao ? (
+            <>
+              <Pressable style={styles.botao} onPress={revisar}>
+                <Text style={styles.botaoTexto}>Registrar</Text>
+              </Pressable>
+              <Pressable style={styles.botaoSecundario} onPress={fechar}>
+                <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.confirmacao}>
+              <Text style={styles.confirmacaoTitulo}>Confirme o abastecimento</Text>
+              <LinhaResumo rotulo="Caminhão" valor={confirmacao.caminhao} />
+              <LinhaResumo rotulo="Tanque" valor={confirmacao.tanque} />
+              <LinhaResumo rotulo="Litros" valor={`${litrosFmt(confirmacao.litros)} L`} />
+              <LinhaResumo rotulo="Quilometragem" valor={`${numero(confirmacao.km)} km`} />
+              <LinhaResumo rotulo="Data" valor={confirmacao.data} />
+              {confirmacao.sobraNoTanque != null && (
+                <LinhaResumo rotulo="Tanque fica com" valor={`${litrosFmt(Math.max(0, confirmacao.sobraNoTanque))} L`} />
+              )}
+              {confirmacao.custoEstimado != null && (
+                <LinhaResumo rotulo="Custo estimado" valor={moeda(confirmacao.custoEstimado)} />
+              )}
 
-                <SeletorLista
-                  rotulo="Tanque de origem"
-                  valor={form.tanque_id}
-                  opcoes={opcoesTanque}
-                  aoMudar={(id) => mudar('tanque_id', id)}
-                  placeholder="Escolher tanque…"
-                  placeholderBusca="Buscar tanque…"
-                  vazio="Nenhum tanque cadastrado."
-                />
-
-                {tanqueForm ? (
-                  <NivelTanque
-                    titulo="Nível atual do tanque"
-                    litros={nivelAtual}
-                    capacidade={capacidadeTanque}
-                    tom="atual"
-                  />
-                ) : null}
-
-                <StepperLitros
-                  valor={form.litros}
-                  aoMudar={(v) => mudar('litros', v)}
-                  maximo={tanqueForm ? nivelAtual : undefined}
-                />
-
-                {tanqueForm && litrosForm > 0 ? (
-                  <>
-                    <NivelTanque
-                      titulo="Nível após abastecimento"
-                      litros={nivelDepois}
-                      capacidade={capacidadeTanque}
-                      tom="depois"
-                      alerta={insuficiente}
-                    />
-                    {insuficiente ? (
-                      <Text style={styles.previaAlerta}>
-                        Litros acima do nível atual — a API vai recusar.
-                      </Text>
-                    ) : null}
-                  </>
-                ) : null}
-
-                <Campo
-                  rotulo="Quilometragem do caminhão"
-                  value={form.km}
-                  onChangeText={(v) => mudar('km', v)}
-                  keyboardType="numeric"
-                />
-                <Campo
-                  rotulo="Data (dd/mm/aaaa)"
-                  value={form.data}
-                  onChangeText={(v) => mudar('data', v)}
-                  maxLength={10}
-                />
-
-                {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.botao,
-                    salvando && styles.desativado,
-                    pressed && !salvando && styles.botaoPressionado,
-                  ]}
-                  onPress={salvar}
-                  disabled={salvando}
-                >
-                  {salvando ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.botaoTexto}>Confirmar abastecimento</Text>
-                  )}
-                </Pressable>
-
-                {ultimoDoCaminhao ? (
-                  <Text style={styles.ultimoRodape}>
-                    Último abastecimento: {dataBR(ultimoDoCaminhao.data)}
-                    {ultimoDoCaminhao.litros != null
-                      ? ` · ${litrosFmt(ultimoDoCaminhao.litros)} L`
-                      : ''}
-                  </Text>
+              <Pressable
+                style={[styles.botao, { marginTop: 12 }, salvando && styles.desativado]}
+                onPress={confirmar}
+                disabled={salvando}
+              >
+                {salvando ? (
+                  <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.ultimoRodape}>Último abastecimento: sem registro na lista</Text>
+                  <Text style={styles.botaoTexto}>Confirmar abastecimento</Text>
                 )}
-
-                <Pressable style={styles.botaoSecundario} onPress={fechar} disabled={salvando}>
-                  <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
-                </Pressable>
-              </>
-            )}
-          </ScrollView>
-        </Modal>
-      )}
+              </Pressable>
+              <Pressable style={styles.botaoSecundario} onPress={() => setConfirmacao(null)} disabled={salvando}>
+                <Text style={styles.botaoSecundarioTexto}>Voltar e corrigir</Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+        </Moldura>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  raiz: { flex: 1 },
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
-  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
-  cabecalhoEmbutido: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12},
-  subtitulo: { fontSize: 16, fontWeight: '600', color: '#374151' },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },
   botaoNovo: {
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)'},
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+
   filtros: { marginBottom: 4 },
-  busca: {
-    backgroundColor: '#fff',
-    borderRadius: RAIO_CAMPO,
-    padding: 12,
-    fontSize: 15,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    outlineStyle: 'none',
-    ...sombraSuave},
-  filtroRotulo: { fontSize: 12, fontWeight: '600', color: TEXTO_SUAVE, marginBottom: 6 },
+  busca: { backgroundColor: '#fff', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  chip: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, ...sombraSuave},
-  chipAtivo: { backgroundColor: VERMELHO },
-  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  resumoCaixa: {
+  chip: {
+    borderWidth: 1,
+    borderColor: cores.borda,
     backgroundColor: '#fff',
-    borderRadius: RAIO_CAMPO,
-    paddingVertical: 10,
+    borderRadius: 999,
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    marginBottom: 10,
-    ...sombraSuave},
-  resumoValor: { fontSize: 14, fontWeight: '700', color: TEXTO },
-  resumoMeta: { fontSize: 12, color: TEXTO_SUAVE, marginTop: 2 },
-  caixa: { ...cartaoBase },
-  topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  principal: { flex: 1, fontSize: 16, fontWeight: '700', color: TEXTO },
-  detalhe: { fontSize: 13, color: TEXTO_SUAVE, marginTop: 4 },
-  consumo: { fontSize: 13, color: VERMELHO, marginTop: 6, fontWeight: '500' },
-  excluirBtn: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#f3f4f6'},
-  excluir: { fontSize: 12, color: TEXTO_SUAVE, fontWeight: '600' },
-  excluirAtivo: { color: VERMELHO },
+  },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  resumo: { fontSize: 13, color: cores.textoMedio, fontWeight: '600', marginBottom: 10 },
+
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  principal: { fontSize: 17, fontWeight: 'bold', color: cores.texto },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
+  consumo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
+  excluir: { fontSize: 13, color: cores.textoSecundario, fontWeight: '600' },
+  excluirAtivo: { color: cores.perigo },
   maisBotao: {
-    backgroundColor: '#fff',
-    borderRadius: RAIO_CAMPO,
+    borderWidth: 1,
+    borderColor: cores.primaria,
+    borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 4,
-    ...sombraSuave},
-  maisTexto: { color: VERMELHO, fontWeight: '600', fontSize: 15 },
-  formConteudo: { paddingBottom: 40, paddingHorizontal: 16, width: '100%', maxWidth: 520, alignSelf: 'center'},
+  },
+  maisTexto: { color: cores.primaria, fontWeight: '600', fontSize: 15 },
+
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: RAIO_CAMPO,
+    borderColor: cores.borda,
+    borderRadius: 8,
     padding: 12,
-    fontSize: 16},
-  nivelCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, ...sombraSuave},
-  nivelTitulo: { fontSize: 13, fontWeight: '600', color: TEXTO_SUAVE, marginBottom: 6 },
-  nivelTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8},
-  nivelLitros: { fontSize: 28, fontWeight: '800', color: TEXTO },
-  nivelPct: { fontSize: 16, fontWeight: '700', color: TEXTO_SUAVE },
-  nivelBarraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden'},
-  nivelBarra: { height: 10, borderRadius: 5 },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    fontSize: 16,
+  },
+  opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  opcao: {
+    borderWidth: 1,
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 8,
-    ...sombraSuave},
-  stepperBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: VERMELHO_SUAVE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    flexShrink: 0},
-  stepperBtnTexto: { fontSize: 26, fontWeight: '700', color: VERMELHO, marginTop: -2 },
-  stepperCampo: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 28,
-    fontWeight: '800',
-    color: TEXTO,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    outlineStyle: 'none'},
-  stepperDica: { fontSize: 12, color: TEXTO_SUAVE, marginTop: 6 },
-  previaAlerta: { fontSize: 12, color: VERMELHO, fontWeight: '600', marginBottom: 10 },
-  ultimoRodape: { textAlign: 'center', fontSize: 12, color: TEXTO_SUAVE, marginTop: 12},
-  sucessoCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginTop: 8, ...sombraSuave},
-  sucessoTitulo: { fontSize: 18, fontWeight: '800', color: VERDE, marginBottom: 8 },
-  sucessoPlaca: { fontSize: 20, fontWeight: '800', color: TEXTO, marginBottom: 6 },
-  sucessoLinha: { fontSize: 15, color: TEXTO, marginBottom: 4 },
-  sucessoMeta: { fontSize: 13, color: TEXTO_SUAVE, marginBottom: 18, marginTop: 4 },
-  erroForm: { color: VERMELHO, marginBottom: 12 },
-  botao: { backgroundColor: VERMELHO, borderRadius: RAIO_BOTAO, padding: 16, alignItems: 'center', marginTop: 4},
-  botaoPressionado: { opacity: 0.88, transform: [{ scale: 0.985 }] },
+    paddingHorizontal: 14,
+  },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  aviso: { color: cores.textoSecundario },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' }});
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
+  confirmacao: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.primaria,
+    borderRadius: 12,
+    padding: 14,
+  },
+  confirmacaoTitulo: { fontSize: 16, fontWeight: 'bold', color: cores.primaria, marginBottom: 8 },
+  linhaResumo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: cores.bordaClara,
+    gap: 12,
+  },
+  linhaResumoRotulo: { fontSize: 14, color: cores.textoSecundario },
+  linhaResumoValor: { fontSize: 14, fontWeight: '600', color: cores.texto, flexShrink: 1, textAlign: 'right' },
+});

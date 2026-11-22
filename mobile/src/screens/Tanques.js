@@ -15,8 +15,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 import Cabecalho from '../components/Cabecalho';
-import Abastecimentos from './Abastecimentos';
+import Moldura from '../ui/Moldura';
 import Entradas from './Entradas';
+import { cores } from '../ui/tema';
 
 // Funções de formatação: 15000 -> "15.000" | "273.50" -> "273,5"
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -34,8 +35,15 @@ const mensagemDe = (e) =>
     ? 'Não foi possível conectar ao servidor.'
     : e.message;
 
-// Atalhos para preencher o tipo de combustível.
-const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina', 'Etanol'];
+// Tipos de combustível aceitos. É uma lista FECHADA: o usuário só escolhe nos botões.
+// Precisa ser igual à lista TIPOS_COMBUSTIVEL do TanqueController (o backend confere de novo).
+const TIPOS = ['Diesel S10', 'Diesel S500', 'Gasolina comum', 'Gasolina aditivada', 'Etanol'];
+
+// Capacidade: número inteiro de litros, na mesma faixa do backend.
+const CAPACIDADE_MIN = 100;
+const CAPACIDADE_MAX = 100000;
+// Deixa só os números (tira vírgula, ponto, letras...). \D = qualquer coisa que não seja dígito.
+const soNumeros = (v) => v.replace(/\D/g, '');
 
 // Formulário em branco para um tanque novo.
 const formVazio = () => ({
@@ -103,7 +111,8 @@ export default function Tanques() {
     setForm({
       nome: t.nome,
       tipo_combustivel: t.tipo_combustivel,
-      capacidade: String(Number(t.capacidade)),
+      // O banco guarda "1000.00": Math.round deixa "1000" no campo (que só aceita inteiro).
+      capacidade: String(Math.round(Number(t.capacidade))),
       nivel_atual: String(Number(t.nivel_atual)),
       principal: Boolean(t.principal),
     });
@@ -119,15 +128,21 @@ export default function Tanques() {
   };
 
   const salvar = async () => {
-    const capacidade = Number(String(form.capacidade).replace(',', '.'));
+    const capacidade = Number(form.capacidade); // o campo já só tem números inteiros
     const nivel = Number(String(form.nivel_atual || '0').replace(',', '.'));
 
-    if (!form.nome.trim() || !form.tipo_combustivel.trim()) {
-      setErroForm('Preencha o nome e o tipo de combustível.');
+    if (!form.nome.trim()) {
+      setErroForm('Preencha o nome do tanque.');
       return;
     }
-    if (!(capacidade > 0)) {
-      setErroForm('Informe a capacidade em litros.');
+    // includes = confere se o tipo escolhido está na lista (um tanque antigo com
+    // um tipo que saiu da lista, como "Gasolina", precisa escolher de novo).
+    if (!TIPOS.includes(form.tipo_combustivel)) {
+      setErroForm('Escolha o tipo de combustível.');
+      return;
+    }
+    if (form.capacidade === '' || capacidade < CAPACIDADE_MIN || capacidade > CAPACIDADE_MAX) {
+      setErroForm('A capacidade deve ficar entre 100 e 100.000 litros.');
       return;
     }
     if (editando === 'novo' && Number.isNaN(nivel)) {
@@ -265,37 +280,43 @@ export default function Tanques() {
                     <Text style={styles.detalhe}>
                       {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
                     </Text>
-                    <Text style={styles.custo}>
-                      Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
-                    </Text>
-                  </Pressable>
-                );
-              }}
-            />
-          </>
-        )}
-      </View>
+                    {baixo && <Text style={styles.alerta}>NÍVEL BAIXO</Text>}
+                  </View>
+                  <View style={styles.barraFundo}>
+                    <View
+                      style={[
+                        styles.barra,
+                        { width: `${Math.min(pct, 100)}%`, backgroundColor: baixo ? cores.perigo : cores.primaria },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.detalhe}>
+                    {litrosFmt(item.nivel_atual)} L de {litrosFmt(item.capacidade)} L ({pct.toFixed(1).replace('.', ',')}%)
+                  </Text>
+                  <Text style={styles.custo}>
+                    Custo médio: {item.custo_medio != null ? moedaL(item.custo_medio) : '—'}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </>
+      )}
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.tela}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Cabecalho
-            titulo={editando === 'novo' ? 'Novo tanque' : 'Editar tanque'}
-            aoVoltar={fechar}
-            sangrar
-          />
+          <Cabecalho titulo={editando === 'novo' ? 'Novo tanque' : 'Editar tanque'} aoVoltar={fechar} />
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
 
-          <Campo
-            rotulo="Tipo de combustível"
-            value={form.tipo_combustivel}
-            onChangeText={(v) => mudar('tipo_combustivel', v)}
-          />
+          {/* Tipo de combustível: só os botões (não tem mais campo de texto livre) */}
+          <Text style={styles.rotulo}>Tipo de combustível</Text>
           <View style={styles.opcoes}>
             {TIPOS.map((tipo) => (
               <Pressable
@@ -310,11 +331,14 @@ export default function Tanques() {
             ))}
           </View>
 
+          {/* Capacidade: só números inteiros (soNumeros tira vírgula e ponto enquanto digita) */}
           <Campo
-            rotulo="Capacidade (litros)"
+            rotulo="Capacidade (100 a 100.000 litros)"
             value={form.capacidade}
-            onChangeText={(v) => mudar('capacidade', v)}
-            keyboardType="decimal-pad"
+            onChangeText={(v) => mudar('capacidade', soNumeros(v))}
+            placeholder="Ex.: 15000"
+            keyboardType="numeric"
+            maxLength={6}
           />
 
           {editando === 'novo' ? (
@@ -386,43 +410,51 @@ export default function Tanques() {
             </Pressable>
           )}
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
-  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  cabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: cores.texto, flexShrink: 1, marginRight: 8 },
   botaoNovo: {
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   segmentos: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb',
+    backgroundColor: cores.bordaClara,
     borderRadius: 8,
     padding: 3,
     marginBottom: 12,
   },
   segmento: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  segmentoAtivo: { backgroundColor: '#dc2626' },
-  segmentoTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  segmentoAtivo: { backgroundColor: cores.primaria },
+  segmentoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  nomeItem: { fontSize: 15, fontWeight: '600', color: '#1f2937', flexShrink: 1, marginRight: 8 },
-  alerta: { color: '#dc2626', fontWeight: '700', fontSize: 12 },
-  barraFundo: { height: 10, backgroundColor: '#e5e7eb', borderRadius: 5, overflow: 'hidden' },
+  nomeItem: { fontSize: 15, fontWeight: '600', color: cores.texto },
+  alerta: { color: cores.perigo, fontWeight: 'bold', fontSize: 12 },
+  barraFundo: { height: 10, backgroundColor: cores.bordaClara, borderRadius: 5, overflow: 'hidden' },
   barra: { height: 10 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 6 },
-  custo: { fontSize: 13, color: '#dc2626', marginTop: 4, fontWeight: '500' },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 6 },
+  custo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
 
   formConteudo: {
     paddingBottom: 40,
@@ -432,41 +464,41 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
   },
-  somenteLeitura: { fontSize: 15, color: '#111827' },
+  somenteLeitura: { fontSize: 15, color: cores.texto },
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-  opcaoTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
   botaoExcluir: {
     borderWidth: 1,
-    borderColor: '#dc2626',
+    borderColor: cores.perigo,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginTop: 16,
   },
-  botaoExcluirAtivo: { backgroundColor: '#dc2626' },
-  botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  botaoExcluirAtivo: { backgroundColor: cores.perigo },
+  botaoExcluirTexto: { color: cores.perigo, fontSize: 15, fontWeight: '600' },
 });

@@ -1,36 +1,32 @@
-// Tokens compartilhados — marca vermelha, cartões suaves, hierarquia clara.
-export const VERMELHO = '#dc2626';
-export const VERMELHO_SUAVE = '#fef2f2';
-export const CINZA_FUNDO = '#f3f4f6';
-export const TEXTO = '#1f2937';
-export const TEXTO_SUAVE = '#6b7280';
-export const VERDE = '#16a34a';
-export const BORDA = '#e5e7eb';
+// Cores do sistema, todas num lugar só. Para mudar a cara do app, mude aqui.
+//
+// Regras da paleta (vermelho e branco):
+//  - primaria (vermelho): botões, destaques e o que pede atenção (pendente, nível baixo, manutenção);
+//  - perigo (vermelho escuro): erros, excluir, recusar, sair;
+//  - branco e cinzas: fundo, cartões, textos e bordas (aprovado/ativo/sucesso ficam neutros);
+//  - exceções em verde: o botão do WhatsApp (a cor que o usuário reconhece)
+//    e o status "Ativo" do caminhão (pronto para rodar).
+export const cores = {
+  primaria: '#e53935',
+  primariaClara: '#fdecea',  // fundo vermelho bem claro (avisos, pré-visualizações)
+  primariaEscura: '#b71c1c', // texto sobre o fundo vermelho claro
+  perigo: '#b71c1c',
 
-export const RAIO_CARTAO = 14;
-export const RAIO_CAMPO = 10;
-export const RAIO_BOTAO = 10;
+  fundo: '#f3f4f6',          // fundo das telas
+  fundoExterno: '#c9ced6',   // fundo do navegador, fora da "tela de celular"
+  cartao: '#fff',
 
-export const sombraSuave = {
-  shadowColor: '#000',
-  shadowOpacity: 0.04,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 1,
+  texto: '#111827',          // títulos e valores
+  textoMedio: '#374151',     // rótulos
+  textoSecundario: '#6b7280',// detalhes
+  textoClaro: '#9ca3af',     // itens inativos
+
+  borda: '#d1d5db',
+  bordaClara: '#e5e7eb',
+
+  whatsapp: '#16a34a',       // exceção: só no botão do WhatsApp
+  ativo: '#16a34a',          // exceção: caminhão ativo (na etiqueta vira fundo verde claro)
 };
 
-export const sombraMedia = {
-  shadowColor: '#000',
-  shadowOpacity: 0.06,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 2,
-};
-
-export const cartaoBase = {
-  backgroundColor: '#fff',
-  borderRadius: RAIO_CARTAO,
-  padding: 14,
-  marginBottom: 8,
-  ...sombraSuave,
-};
+// Largura da "tela de celular" quando o sistema abre no computador.
+export const LARGURA_CELULAR = 430;

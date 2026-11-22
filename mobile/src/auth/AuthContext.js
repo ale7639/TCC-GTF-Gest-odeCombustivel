@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
     definirAoExpirar(limparSessao);
   }, []);
 
-  // AUTH ENTRAR — login = CPF (motorista) ou e-mail (admin).
+  // Envia login (e-mail do admin ou CPF do motorista) e senha; se estiverem certos, guarda o token.
   const entrar = async (login, senha) => {
     const dados = await api('/login', {
       metodo: 'POST',

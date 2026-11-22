@@ -57,7 +57,7 @@ export async function api(caminho, { metodo = 'GET', corpo } = {}) {
 
 // Traduz o código de erro HTTP numa mensagem que o usuário entende.
 function mensagemDeErro(status, json) {
-  if (status === 429) return 'Muitas tentativas seguidas. Aguarde 1 minuto e tente novamente.';
+  if (status === 429) return json?.message?.startsWith('Muitas') ? json.message : 'Muitas tentativas seguidas. Aguarde e tente novamente.';
   if (status === 403) return json?.message || 'Você não tem permissão para fazer isso.';
   if (status === 404) return 'Registro não encontrado. Ele pode ter sido excluído.';
   if (status >= 500) return 'Erro interno no servidor. Tente novamente em instantes.';

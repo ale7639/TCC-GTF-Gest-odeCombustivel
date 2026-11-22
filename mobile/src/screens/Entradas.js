@@ -17,8 +17,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import SeletorLista from '../components/SeletorLista';
+import Moldura from '../ui/Moldura';
 import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
+import { cores } from '../ui/tema';
 
 // Funções de formatação.
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -401,12 +402,13 @@ export default function Entradas() {
 
       {/* Formulário de nova entrada */}
       <Modal visible={formAberto} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.modal}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Cabecalho titulo="Nova entrada" aoVoltar={fechar} sangrar />
+          <Cabecalho titulo="Nova entrada" aoVoltar={fechar} />
 
           <SeletorLista
             rotulo="Tanque"
@@ -487,6 +489,7 @@ export default function Entradas() {
             <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
           </Pressable>
         </ScrollView>
+        </Moldura>
       </Modal>
 
       <Modal visible={!!fotoAberta} transparent animationType="fade" onRequestClose={() => setFotoAberta(null)}>
@@ -509,74 +512,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  subtitulo: { fontSize: 16, fontWeight: '600', color: '#374151' },
-  botaoNovo: {
-    backgroundColor: '#dc2626',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  filtros: { marginBottom: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  chip: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  chipAtivo: { backgroundColor: '#dc2626' },
-  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  resumo: { fontSize: 13, color: '#6b7280', marginBottom: 10 },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  subtitulo: { fontSize: 16, fontWeight: '600', color: cores.textoMedio },
+  botaoNovo: { backgroundColor: cores.primaria, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  principal: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  verFoto: { fontSize: 13, color: '#dc2626', fontWeight: '600', marginTop: 6 },
-  excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
-  excluirAtivo: { color: '#dc2626' },
-  custo: { fontSize: 13, color: '#dc2626', marginTop: 4, fontWeight: '500' },
-  maisBotao: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
-  previa: { backgroundColor: '#fef2f2', borderRadius: 8, padding: 12, marginBottom: 16 },
-  previaTitulo: { fontSize: 14, fontWeight: '600', color: '#991b1b', marginBottom: 4 },
-  previaLinha: { fontSize: 14, color: '#374151', marginTop: 2 },
-  previaDepois: { fontSize: 16, fontWeight: '700', color: '#991b1b', marginTop: 4 },
-  avisoFoto: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
-  fotoPreview: { height: 160, borderRadius: 8, marginBottom: 12, backgroundColor: '#e5e7eb' },
-  fotoModal: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  fotoGrande: { width: '100%', height: '80%', maxWidth: 720 },
-  fecharFoto: { color: '#fff', marginTop: 12, fontWeight: '600' },
+  principal: { fontSize: 16, fontWeight: 'bold', color: cores.texto },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
+  excluir: { fontSize: 13, color: cores.textoSecundario, fontWeight: '600' },
+  excluirAtivo: { color: cores.perigo },
+  custo: { fontSize: 13, color: cores.primaria, marginTop: 4, fontWeight: '500' },
+  previa: { backgroundColor: cores.primariaClara, borderRadius: 8, padding: 12, marginBottom: 16 },
+  previaTitulo: { fontSize: 14, fontWeight: '600', color: cores.primariaEscura, marginBottom: 4 },
+  previaLinha: { fontSize: 14, color: cores.textoMedio, marginTop: 2 },
+  previaDepois: { fontSize: 16, fontWeight: 'bold', color: cores.primariaEscura, marginTop: 4 },
 
-  modal: { flex: 1, backgroundColor: '#f3f4f6' },
-  secao: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 10 },
-  formConteudo: {
-    paddingBottom: 40,
-    paddingHorizontal: 16,
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-  },
+  modal: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 12 },
+  secao: { fontSize: 16, fontWeight: '600', color: cores.texto, marginTop: 8, marginBottom: 10 },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -584,18 +546,18 @@ const styles = StyleSheet.create({
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
 });

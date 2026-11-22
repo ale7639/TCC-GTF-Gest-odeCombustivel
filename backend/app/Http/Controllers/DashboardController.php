@@ -1,5 +1,16 @@
 <?php
 
+// =====================================================================================
+// DashboardController — os números do PAINEL inicial do admin.
+//
+// Rota (routes/api.php, grupo do admin):
+//   GET /api/dashboard?dias=7|30|90  -> index()
+//
+// Devolve: tanques (com % e alerta de nível baixo), totais do período (litros e gastos),
+// os 5 últimos abastecimentos, as 5 últimas notas e o número de PENDENTES (o sino).
+// A tela Dashboard.js chama esta rota ao abrir e a cada 30 segundos (para o sino).
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
@@ -23,6 +34,7 @@ class DashboardController extends Controller
         if (! in_array($dias, [7, 30, 90], true)) {
             $dias = 30;
         }
+        // Data de início do período, ex.: hoje − 30 dias, no formato aaaa-mm-dd.
         $inicio = now()->subDays($dias)->toDateString();
 
         // PAINEL TANQUES — percentual e alerta de nível baixo (< 20%).
@@ -38,16 +50,18 @@ class DashboardController extends Controller
                 'capacidade'       => (float) $tanque->capacidade,
                 'nivel_atual'      => (float) $tanque->nivel_atual,
                 'percentual'       => round($percentual, 1),
-                'alerta'           => $percentual < 20,
+                'alerta'           => $percentual < 20,   // a tela mostra "NÍVEL BAIXO" em vermelho
                 'principal'        => (bool) $tanque->principal,
                 'custo_medio'      => $tanque->custo_medio,
             ];
         });
 
         // O principal é o que foi marcado como tal; se nenhum foi, vale o de maior capacidade.
+        // firstWhere = o primeiro da lista com principal = true.
         $principal = $tanques->firstWhere('principal', true)
             ?? $tanques->sortByDesc('capacidade')->first();
 
+        // Os outros = todos menos o principal (aparecem na seção recolhível "Outros tanques").
         $outros = $principal
             ? $tanques->where('id', '!=', $principal['id'])->values()
             : $tanques->values();
@@ -65,6 +79,7 @@ class DashboardController extends Controller
                 'litros'    => (float) $a->litros,
                 'placa'     => $a->caminhao->placa,
                 'motorista' => $a->motorista->nome,
+                // Sem tanque = abastecimento feito num posto.
                 'tanque'    => $a->tanque?->nome ?? 'Fora da base',
             ]);
 
@@ -75,6 +90,7 @@ class DashboardController extends Controller
             ->limit(5)
             ->get()
             ->map(function ($nota) {
+                // Descobre a que a nota pertence: a uma compra de combustível ou a uma manutenção.
                 $entrada    = $nota->entradas->first();
                 $manutencao = $nota->manutencoes->first();
 
@@ -108,6 +124,7 @@ class DashboardController extends Controller
                     ->where('data', '>=', $inicio)->sum('valor_total'),
             'gasto_manutencao'    => (float) Manutencao::where('status', 'aprovado')->where('data', '>=', $inicio)->sum('valor'),
 
+            // Quantos lançamentos esperam aprovação (número do sino no cabeçalho).
             'pendentes'              => Lancamentos::contarPendentes(),
             'pedidos_senha'          => SolicitacaoSenha::pendentes()->count(),
             'solicitacoes_senha'     => SolicitacaoSenha::pendentes()

@@ -1,90 +1,55 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMenu } from '../menu/MenuContext';
+import { cores } from '../ui/tema';
 
-const VERMELHO = '#dc2626';
-
-// Faixa vermelha de topo (menu ☰ / voltar + título + ações), alinhada aos mockups.
-// sangrar: use when the parent still has horizontal padding (telas antigas do menu Mais).
-export default function Cabecalho({ titulo, children, aoVoltar, sangrar = false }) {
-  const menu = useMenu();
-  const fixo = menu?.fixo ?? false;
-  const abrir = menu?.abrir;
+// Barra vermelha do topo de todas as telas.
+// - à esquerda: botão do menu (☰) ou, se "aoVoltar" for passado, a seta de voltar (formulários);
+// - no meio: o título;
+// - à direita: botões opcionais da tela (ex.: "+ Novo").
+// Uso: <Cabecalho titulo="GESTÃO DE FROTA"> <botão /> </Cabecalho>
+//      <Cabecalho titulo="Novo caminhão" aoVoltar={fechar} />
+// As margens negativas fazem a barra ocupar a largura toda, por cima do espaçamento da tela.
+export default function Cabecalho({ titulo, children, aoVoltar }) {
+  const menu = useMenu(); // fica vazio fora do menu (ex.: área do motorista)
 
   return (
-    <View style={[styles.faixa, sangrar && styles.faixaSangrar]}>
-      <View style={styles.linha}>
+    <View style={styles.barra}>
+      <View style={styles.esquerda}>
         {aoVoltar ? (
-          <Pressable
-            onPress={aoVoltar}
-            style={({ pressed }) => [styles.icone, pressed && styles.iconePressionado]}
-            accessibilityLabel="Voltar"
-            accessibilityRole="button"
-            hitSlop={8}
-          >
+          <Pressable onPress={aoVoltar} accessibilityLabel="Voltar" hitSlop={8}>
             <MaterialCommunityIcons name="arrow-left" size={26} color="#fff" />
           </Pressable>
-        ) : !fixo && abrir ? (
-          <Pressable
-            onPress={abrir}
-            style={({ pressed }) => [styles.icone, pressed && styles.iconePressionado]}
-            accessibilityLabel="Abrir menu"
-            accessibilityRole="button"
-            hitSlop={8}
-          >
-            <MaterialCommunityIcons name="menu" size={26} color="#fff" />
+        ) : menu?.abrir ? (
+          <Pressable onPress={menu.abrir} accessibilityLabel="Abrir menu" hitSlop={8}>
+            <MaterialCommunityIcons name="menu" size={28} color="#fff" />
           </Pressable>
-        ) : (
-          <View style={styles.icone} />
-        )}
-        <Text style={styles.titulo} numberOfLines={1}>
-          {titulo}
-        </Text>
-        <View style={styles.direita}>{children}</View>
+        ) : null}
       </View>
+
+      <Text style={styles.titulo} numberOfLines={1}>
+        {titulo}
+      </Text>
+
+      <View style={styles.direita}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  faixa: {
-    backgroundColor: VERMELHO,
-    paddingTop: Platform.OS === 'web' ? 14 : 48,
-    paddingBottom: 12,
-    paddingHorizontal: 10,
-  },
-  faixaSangrar: {
+  barra: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: cores.primaria,
     marginHorizontal: -16,
-    paddingHorizontal: 26,
+    marginTop: -56,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
+    minHeight: 64,
   },
-  linha: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-  },
-  icone: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  iconePressionado: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  titulo: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  direita: {
-    minWidth: 44,
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
+  esquerda: { width: 40 },
+  titulo: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 17, fontWeight: 'bold' },
+  direita: { minWidth: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
 });

@@ -12,11 +12,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import SeletorLista from '../components/SeletorLista';
+import Moldura from '../ui/Moldura';
 import { linkWhatsApp, mascaraCPF, mascaraTelefone, somenteDigitos } from '../utils/formatos';
+import { cores } from '../ui/tema';
 
 const POR_PAGINA = 15;
 
@@ -34,12 +36,18 @@ const formVazio = () => ({
   telefone: '',
   ativo: true,
   caminhao_id: null, // null = sem caminhão
-  acesso_senha: '', // login = CPF; senha definida/redefinida pelo ADM
+  acesso_senha: '',  // senha de acesso ao app (o motorista entra com o CPF)
 });
 
-// Etiqueta colorida: verde para ativo, cinza para inativo.
+// Iniciais do nome para o "avatar": "João Pedro Almeida" -> "JA".
+const iniciais = (nome) => {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+};
+
+// Etiqueta de situação: ativo (neutro) ou inativo (cinza claro).
 function Etiqueta({ ativo }) {
-  const cor = ativo ? '#16a34a' : '#6b7280';
+  const cor = ativo ? cores.texto : cores.textoSecundario;
   return (
     <View style={[styles.etiqueta, { backgroundColor: `${cor}22` }]}>
       <Text style={[styles.etiquetaTexto, { color: cor }]}>{ativo ? 'Ativo' : 'Inativo'}</Text>
@@ -167,7 +175,7 @@ export default function Motoristas() {
     });
     setErroForm(null);
     setConfirmando(false);
-    setTemAcesso(Boolean(m.tem_acesso ?? m.acesso_email));
+    setTemAcesso(Boolean(m.tem_acesso));
     setMsgAcesso(null);
     setEditando(m);
   };
@@ -196,7 +204,7 @@ export default function Motoristas() {
       return;
     }
     if (form.acesso_senha && form.acesso_senha.length < 6) {
-      setErroForm('A senha precisa ter pelo menos 6 caracteres (ou deixe em branco).');
+      setErroForm('A senha de acesso precisa ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -282,10 +290,77 @@ export default function Motoristas() {
           autoCorrect={false}
         />
 
-        {filtrados.length > 0 && (
-          <Text style={styles.resumo}>
-            Mostrando {pagina.length} de {filtrados.length}
-          </Text>
+      {erro && <Text style={styles.erro}>{erro}</Text>}
+      {carregando && !erro && <ActivityIndicator size="large" style={{ marginTop: 40 }} />}
+
+      <FlatList
+        data={filtrados}
+        keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={atualizando}
+            onRefresh={() => {
+              setAtualizando(true);
+              carregar();
+            }}
+          />
+        }
+        ListEmptyComponent={
+          !carregando && !erro ? <Text style={styles.vazio}>Nenhum motorista encontrado.</Text> : null
+        }
+        contentContainerStyle={{ paddingBottom: 24 }}
+        renderItem={({ item }) => (
+          <Pressable style={styles.caixa} onPress={() => abrirEdicao(item)}>
+            {/* Topo: iniciais + nome e telefone + situação */}
+            <View style={styles.topoCartao}>
+              <View style={[styles.avatar, !item.ativo && styles.avatarInativo]}>
+                <Text style={[styles.avatarTexto, !item.ativo && { color: cores.textoSecundario }]}>
+                  {iniciais(item.nome)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nome} numberOfLines={1}>
+                  {item.nome}
+                </Text>
+                <Text style={styles.detalhe}>{item.telefone || 'sem telefone'}</Text>
+              </View>
+              <Etiqueta ativo={Boolean(item.ativo)} />
+            </View>
+
+            {/* Dados em duas colunas */}
+            <View style={styles.dados}>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>CPF</Text>
+                <Text style={styles.dadoValor}>{item.cpf}</Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>CNH</Text>
+                <Text style={styles.dadoValor}>{item.cnh}</Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>Caminhão</Text>
+                <Text style={styles.dadoValor} numberOfLines={1}>
+                  {item.caminhao ? `${item.caminhao.placa} · ${item.caminhao.modelo}` : 'sem caminhão'}
+                </Text>
+              </View>
+              <View style={styles.dado}>
+                <Text style={styles.dadoRotulo}>Acesso ao app</Text>
+                <Text style={styles.dadoValor}>{item.tem_acesso ? 'Liberado (CPF)' : 'Sem acesso'}</Text>
+              </View>
+            </View>
+
+            {/* WhatsApp discreto no rodapé */}
+            {linkWhatsApp(item.telefone) && (
+              <Pressable
+                style={styles.whatsLink}
+                hitSlop={6}
+                onPress={() => Linking.openURL(linkWhatsApp(item.telefone, `Olá, ${item.nome.split(' ')[0]}!`))}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={18} color={cores.whatsapp} />
+                <Text style={styles.whatsLinkTexto}>Conversar no WhatsApp</Text>
+              </Pressable>
+            )}
+          </Pressable>
         )}
 
         {erro && <Text style={styles.erro}>{erro}</Text>}
@@ -347,16 +422,13 @@ export default function Motoristas() {
 
       {/* Formulário de cadastro e edição */}
       <Modal visible={editando !== null} animationType="slide" onRequestClose={fechar}>
+        <Moldura>
         <ScrollView
           style={styles.tela}
           contentContainerStyle={styles.formConteudo}
           keyboardShouldPersistTaps="handled"
         >
-          <Cabecalho
-            titulo={editando === 'novo' ? 'Novo motorista' : 'Editar motorista'}
-            aoVoltar={fechar}
-            sangrar
-          />
+          <Cabecalho titulo={editando === 'novo' ? 'Novo motorista' : 'Editar motorista'} aoVoltar={fechar} />
 
           <Campo rotulo="Nome" value={form.nome} onChangeText={(v) => mudar('nome', v)} />
           <Campo
@@ -400,20 +472,16 @@ export default function Motoristas() {
             vazio="Nenhum caminhão disponível."
           />
 
-          <Text style={styles.secaoAcesso}>Acesso ao app</Text>
+          <Text style={styles.secaoAcesso}>Acesso ao app (opcional)</Text>
           <Text style={styles.dica}>
-            O login do motorista é o CPF. Ao salvar, a conta é criada automaticamente. Senha
-            inicial = CPF (só números), ou informe outra abaixo.
+            O motorista entra com o CPF deste cadastro e a senha definida aqui. Ele vê só o caminhão dele.
           </Text>
           <View style={styles.caixaAcesso}>
-            <Text style={styles.rotulo}>Identificador (CPF)</Text>
-            <Text style={styles.cpfLogin}>{form.cpf || '— informe o CPF acima —'}</Text>
+            <Text style={styles.situacaoAcesso}>
+              {temAcesso ? 'Acesso liberado · login pelo CPF' : 'Sem acesso ao app'}
+            </Text>
             <Campo
-              rotulo={
-                temAcesso
-                  ? 'Redefinir senha (deixe em branco para manter)'
-                  : 'Senha (opcional; padrão = dígitos do CPF)'
-              }
+              rotulo={temAcesso ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha (mínimo 6 caracteres)'}
               value={form.acesso_senha}
               onChangeText={(v) => mudar('acesso_senha', v)}
               secureTextEntry
@@ -455,23 +523,31 @@ export default function Motoristas() {
             </Pressable>
           )}
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
-  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  cabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },
+  tituloTela: { fontSize: 20, fontWeight: 'bold', color: cores.texto, flexShrink: 1, marginRight: 8 },
   botaoNovo: {
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 15 },
   busca: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -489,12 +565,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 40 },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  nome: { fontSize: 17, fontWeight: '700', color: '#1f2937', flexShrink: 1, marginRight: 8 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  etiqueta: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 10 },
+  nome: { fontSize: 17, fontWeight: 'bold', color: cores.texto, flexShrink: 1, marginRight: 8 },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 4 },
+  etiqueta: { borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   etiquetaTexto: { fontSize: 12, fontWeight: '600' },
 
   formConteudo: {
@@ -505,11 +582,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
   campo: {
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -517,52 +594,70 @@ const styles = StyleSheet.create({
   opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   opcao: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
   },
-  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
+  opcaoAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  opcaoTexto: { fontSize: 14, fontWeight: '600', color: cores.textoMedio },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   desativado: { opacity: 0.6 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
   botaoExcluir: {
     borderWidth: 1,
-    borderColor: '#dc2626',
+    borderColor: cores.perigo,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginTop: 16,
   },
-  botaoExcluirAtivo: { backgroundColor: '#dc2626' },
-  botaoExcluirTexto: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
-  secaoAcesso: { fontSize: 16, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 8 },
-  dica: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
+  botaoExcluirAtivo: { backgroundColor: cores.perigo },
+  botaoExcluirTexto: { color: cores.perigo, fontSize: 15, fontWeight: '600' },
+  secaoAcesso: { fontSize: 16, fontWeight: '600', color: cores.texto, marginTop: 8, marginBottom: 8 },
+  dica: { fontSize: 13, color: cores.textoSecundario, marginBottom: 16 },
   caixaAcesso: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 },
-  cpfLogin: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-  },
-  removerAcesso: { color: '#dc2626', fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  okAcesso: { color: '#16a34a', marginBottom: 12, fontWeight: '600' },
+  botaoAcesso: { borderWidth: 1, borderColor: cores.primaria, borderRadius: 8, padding: 12, alignItems: 'center' },
+  botaoAcessoTexto: { color: cores.primaria, fontSize: 15, fontWeight: '600' },
+  removerAcesso: { color: cores.perigo, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  okAcesso: { color: cores.texto, marginBottom: 12, fontWeight: '600' },
   whats: {
     alignSelf: 'flex-start',
-    backgroundColor: '#16a34a',
+    backgroundColor: cores.whatsapp,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
     marginTop: 8,
   },
   whatsTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  topoCartao: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: cores.primariaClara,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInativo: { backgroundColor: cores.bordaClara },
+  avatarTexto: { color: cores.primaria, fontWeight: 'bold', fontSize: 15 },
+  dados: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: cores.bordaClara,
+  },
+  dado: { width: '50%', paddingVertical: 4, paddingRight: 8 },
+  dadoRotulo: { fontSize: 11, color: cores.textoSecundario },
+  dadoValor: { fontSize: 13, fontWeight: '600', color: cores.texto, marginTop: 1 },
+  whatsLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-start' },
+  whatsLinkTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
+  situacaoAcesso: { fontSize: 13, fontWeight: '600', color: cores.textoMedio, marginBottom: 10 },
 });

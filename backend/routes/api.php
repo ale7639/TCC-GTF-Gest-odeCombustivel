@@ -1,5 +1,20 @@
 <?php
 
+// =====================================================================================
+// routes/api.php — todas as rotas da API (o Laravel coloca "/api" na frente de cada uma).
+//
+// Organização:
+//   1) rotas públicas: login e foto assinada;
+//   2) auth:sanctum = só com token válido (usuário logado);
+//      2a) ApenasAdmin     = tudo que o administrador faz;
+//      2b) ApenasMotorista = o que o motorista faz (prefixo /meu).
+//
+// CRUDs completos (cadastrar, listar, alterar e excluir):
+//   caminhões, motoristas, tanques, lavagens e manutenções.
+//
+// Para ver a lista de rotas no terminal: php artisan route:list --path=api
+// =====================================================================================
+
 use App\Http\Controllers\AbastecimentoController;
 use App\Http\Controllers\AprovacaoController;
 use App\Http\Controllers\AuthController;
@@ -18,14 +33,17 @@ use App\Http\Middleware\ApenasAdmin;
 use App\Http\Middleware\ApenasMotorista;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\RelatorioCaminhaoController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// AUTH — rotas públicas (login / esqueci senha). throttle:5,1 por IP.
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
-Route::post('/senha/esqueci', [AuthController::class, 'esqueciSenha'])->middleware('throttle:5,1');
+// Rota pública: confere login (e-mail do admin ou CPF do motorista) e senha, e devolve o token.
+// Proteção contra adivinhação de senha:
+//  - no AuthController: 5 senhas erradas para o mesmo login = bloqueio de 15 minutos;
+//  - throttle:20,1 = no máximo 20 tentativas de login por minuto vindas do mesmo IP (contra robôs).
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 
 // Foto de um abastecimento fora da base. Pública, mas só abre com o endereço assinado
 // (que a API entrega, por 2 horas, a quem tem permissão de ver o lançamento).
@@ -67,12 +85,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('entradas', EntradaCombustivelController::class)
             ->only(['index', 'store', 'destroy']);
 
-        // Lavagens e manutenções: listar, registrar e excluir.
+        // Lavagens e manutenções: CRUD completo (listar, registrar, alterar e excluir).
+        // whereNumber('id') = a rota só aceita número no {id} (ex.: /lavagens/abc dá 404).
         Route::get('/lavagens', [LavagemController::class, 'index']);
         Route::post('/lavagens', [LavagemController::class, 'store']);
+        Route::put('/lavagens/{id}', [LavagemController::class, 'update'])->whereNumber('id');
         Route::delete('/lavagens/{id}', [LavagemController::class, 'destroy'])->whereNumber('id');
         Route::get('/manutencoes', [ManutencaoController::class, 'index']);
         Route::post('/manutencoes', [ManutencaoController::class, 'store']);
+        Route::put('/manutencoes/{id}', [ManutencaoController::class, 'update'])->whereNumber('id');
         Route::delete('/manutencoes/{id}', [ManutencaoController::class, 'destroy'])->whereNumber('id');
 
         // Aprovação dos lançamentos feitos pelos motoristas.
@@ -87,10 +108,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/relatorios/abastecimentos/exportar', [RelatorioController::class, 'exportarAbastecimentos']);
         Route::get('/relatorios/notas-fiscais/exportar', [RelatorioController::class, 'exportarNotasFiscais']);
         Route::get('/relatorios/motoristas', [RelatorioController::class, 'motoristas']);
-        Route::get('/relatorios/motoristas/{motorista}', [RelatorioController::class, 'motoristaHistorico']);
-        Route::get('/relatorios/motoristas/{motorista}/exportar', [RelatorioController::class, 'exportarMotorista']);
-        Route::get('/relatorios/caminhoes/{caminhao}', [RelatorioController::class, 'caminhaoHistorico']);
-        Route::get('/relatorios/caminhoes/{caminhao}/exportar', [RelatorioController::class, 'exportarCaminhao']);
+        Route::get('/relatorios/caminhoes/{caminhao}', [RelatorioCaminhaoController::class, 'show']);
         Route::get('/notas-fiscais', [NotaFiscalController::class, 'index']);
         Route::post('/notas-fiscais', [NotaFiscalController::class, 'store']);
         Route::delete('/notas-fiscais/{id}', [NotaFiscalController::class, 'destroy'])->whereNumber('id');

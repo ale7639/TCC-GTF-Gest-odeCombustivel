@@ -1,5 +1,14 @@
 <?php
 
+// =====================================================================================
+// MIGRATION: tabelas de FILAS (jobs) do Laravel. VEIO PRONTA com o Laravel.
+//
+// Fila = tarefas para rodar "depois", em segundo plano (ex.: mandar e-mail).
+// No .env está QUEUE_CONNECTION=database, mas o nosso sistema NÃO usa filas:
+// todas as operações acontecem na hora, dentro da requisição.
+// As tabelas existem porque fazem parte da instalação padrão do Laravel.
+// =====================================================================================
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -11,16 +20,18 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Tarefas esperando para rodar.
         Schema::create('jobs', function (Blueprint $table) {
             $table->id();
-            $table->string('queue')->index();
-            $table->longText('payload');
-            $table->unsignedTinyInteger('attempts');
-            $table->unsignedInteger('reserved_at')->nullable();
-            $table->unsignedInteger('available_at');
+            $table->string('queue')->index();                    // nome da fila
+            $table->longText('payload');                         // a tarefa em si (serializada)
+            $table->unsignedTinyInteger('attempts');             // quantas vezes já tentou rodar
+            $table->unsignedInteger('reserved_at')->nullable();  // quando um processo pegou a tarefa
+            $table->unsignedInteger('available_at');             // a partir de quando pode rodar
             $table->unsignedInteger('created_at');
         });
 
+        // Grupos de tarefas (lotes).
         Schema::create('job_batches', function (Blueprint $table) {
             $table->string('id')->primary();
             $table->string('name');
@@ -34,14 +45,15 @@ return new class extends Migration
             $table->integer('finished_at')->nullable();
         });
 
+        // Tarefas que deram erro (com a mensagem do erro, para investigar).
         Schema::create('failed_jobs', function (Blueprint $table) {
             $table->id();
             $table->string('uuid')->unique();
             $table->text('connection');
             $table->text('queue');
             $table->longText('payload');
-            $table->longText('exception');
-            $table->timestamp('failed_at')->useCurrent();
+            $table->longText('exception');                       // o erro que aconteceu
+            $table->timestamp('failed_at')->useCurrent();        // useCurrent = preenche com a data/hora atual
         });
     }
 

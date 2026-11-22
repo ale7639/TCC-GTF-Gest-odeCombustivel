@@ -1,5 +1,22 @@
 <?php
 
+// =====================================================================================
+// MotoristaController — CRUD de motoristas + o ACESSO deles ao app.
+//
+// Rotas (routes/api.php, grupo do admin):
+//   GET    /api/motoristas               -> index()         lista (com o caminhão de cada um)
+//   POST   /api/motoristas               -> store()         cadastra
+//   GET    /api/motoristas/{id}          -> show()
+//   PUT    /api/motoristas/{id}          -> update()        altera
+//   DELETE /api/motoristas/{id}          -> destroy()       exclui (só sem histórico)
+//   DELETE /api/motoristas/{id}/acesso   -> removerAcesso() tira o login, mantém o cadastro
+//
+// Duas tabelas envolvidas:
+//   motoristas = os dados da pessoa (nome, CPF, CNH, telefone, ativo);
+//   users      = o LOGIN dela (senha), ligado por users.motorista_id, com perfil 'motorista'.
+// O motorista entra no app com o CPF e a senha que o ADMIN definiu (acesso_senha).
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
@@ -11,13 +28,16 @@ use App\Models\SolicitacaoSenha;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
+use Illuminate\Support\Arr;                // Arr::except = copia um array tirando algumas chaves
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;       // Hash::make = transforma a senha em hash (bcrypt)
 use Illuminate\Validation\Rule;
 
 class MotoristaController extends Controller
 {
-    // MOTORISTA — CRUD, vínculo com caminhão, acesso (login CPF) e pedidos de senha.
+    // Campos do formulário que não são colunas da tabela motoristas.
+    // (caminhao_id vai para a tabela caminhoes; acesso_senha vai para a tabela users.)
+    private const NAO_SAO_DO_MOTORISTA = ['caminhao_id', 'acesso_senha'];
 
     // MOTORISTA FORM — campos do formulário que não são colunas da tabela motoristas.
     private const NAO_SAO_DO_MOTORISTA = ['caminhao_id', 'acesso_senha', 'criar_acesso'];
@@ -29,14 +49,13 @@ class MotoristaController extends Controller
             ->orderBy('nome')
             ->get();
 
-        $comAcesso = User::whereNotNull('motorista_id')->where('perfil', 'motorista')->pluck('motorista_id')->flip();
+        // Quais motoristas já têm acesso ao app (login pelo CPF).
+        // pluck + all = lista simples de ids, ex.: [3, 5, 8].
+        $comAcesso = User::whereNotNull('motorista_id')->pluck('motorista_id')->all();
 
+        // array_merge acrescenta o campo "tem_acesso" (true/false) em cada motorista.
         return response()->json(
-            $motoristas->map(fn ($m) => array_merge($m->toArray(), [
-                'tem_acesso' => $comAcesso->has($m->id),
-                // Compat: telas antigas ainda leem acesso_email; login real é o CPF.
-                'acesso_email' => $comAcesso->has($m->id) ? $m->cpf : null,
-            ]))
+            $motoristas->map(fn ($m) => array_merge($m->toArray(), ['tem_acesso' => in_array($m->id, $comAcesso)]))
         );
     }
 
@@ -46,6 +65,7 @@ class MotoristaController extends Controller
         $dados = $this->validar($request);
 
         // A transaction garante que, se algo falhar no meio, nada fica salvo pela metade.
+        // São até 3 gravações: o motorista, o vínculo com o caminhão e o login.
         $motorista = DB::transaction(function () use ($dados) {
             $motorista = Motorista::create(Arr::except($dados, self::NAO_SAO_DO_MOTORISTA));
             $this->vincular($motorista, $dados['caminhao_id'] ?? null);
@@ -73,6 +93,7 @@ class MotoristaController extends Controller
         DB::transaction(function () use ($motorista, $dados, $senhaRedefinida, $request) {
             $motorista->update(Arr::except($dados, self::NAO_SAO_DO_MOTORISTA));
 
+            // array_key_exists = o campo veio na requisição (mesmo que null, que significa "sem caminhão").
             if (array_key_exists('caminhao_id', $dados)) {
                 $this->vincular($motorista, $dados['caminhao_id']);
             }
@@ -158,6 +179,7 @@ class MotoristaController extends Controller
             || Lavagem::where('motorista_id', $motorista->id)->exists()
             || Manutencao::where('motorista_id', $motorista->id)->exists();
 
+        // 409 = conflito: excluir apagaria a referência dos lançamentos dele.
         if ($temHistorico) {
             return response()->json([
                 'message' => 'Este motorista tem histórico de abastecimentos, lavagens ou manutenções. Marque como inativo em vez de excluir.',
@@ -165,6 +187,7 @@ class MotoristaController extends Controller
         }
 
         // O login do motorista (se houver) é apagado junto, com as sessões abertas.
+        // tokens()->delete() = apaga os tokens do Sanctum (desloga de todos os aparelhos).
         User::where('motorista_id', $motorista->id)->get()->each(function ($usuario) {
             $usuario->tokens()->delete();
             $usuario->delete();
@@ -176,52 +199,38 @@ class MotoristaController extends Controller
         return response()->json(['message' => 'Motorista excluído.']);
     }
 
-    /**
-     * Garante User ligado ao motorista. Login do app = CPF; e-mail interno só na tabela users.
-     * Se $senha for null e forçar, usa os dígitos do CPF.
-     */
-    private function garantirUsuario(Motorista $motorista, ?string $senha, bool $forcarSenha): User
+    // Acesso do motorista ao app: ele entra com o CPF do cadastro e a senha definida pelo admin.
+    // Senha preenchida = cria o acesso (se ainda não existe) ou troca a senha.
+    // Senha em branco = não mexe no acesso.
+    private function salvarAcesso(Motorista $motorista, array $dados): void
     {
-        $email = $motorista->emailAcessoInterno();
-        $usuario = User::where('motorista_id', $motorista->id)->where('perfil', 'motorista')->first();
+        $usuario = User::where('motorista_id', $motorista->id)->first();
+        $senha   = $dados['acesso_senha'] ?? null;
+
+        if (! $senha) {
+            // Mantém o nome do login igual ao do cadastro.
+            // "?->" = se não houver login ($usuario null), não faz nada.
+            $usuario?->forceFill(['name' => $motorista->nome])->save();
+
+            return;
+        }
 
         if (! $usuario) {
-            $usuario = User::where('email', $email)->first() ?: new User(['email' => $email]);
-            $usuario->perfil = 'motorista';
-            $usuario->motorista_id = $motorista->id;
-            $forcarSenha = true;
+            // forceCreate porque perfil e motorista_id não estão no fillable do User (proteção).
+            User::forceCreate([
+                'name'         => $motorista->nome,
+                'email'        => null, // o motorista não usa e-mail: entra pelo CPF
+                'password'     => Hash::make($senha),   // guarda o HASH, nunca a senha em texto
+                'perfil'       => 'motorista',
+                'motorista_id' => $motorista->id,
+            ]);
+
+            return;
         }
 
-        $usuario->name = $motorista->nome;
-        $usuario->motorista_id = $motorista->id;
-        $usuario->perfil = 'motorista';
-
-        // Mantém e-mail legado se já existir; só preenche o interno quando for conta nova.
-        if (! $usuario->email) {
-            $usuario->email = $email;
-        }
-
-        if ($forcarSenha) {
-            // User usa cast "hashed": passar a senha em texto puro.
-            $usuario->password = $senha !== null && $senha !== '' ? $senha : $motorista->senhaPadrao();
-            if ($usuario->exists) {
-                $usuario->tokens()->delete();
-            }
-        }
-
-        $usuario->save();
-
-        return $usuario;
-    }
-
-    private function comAcesso(Motorista $motorista): array
-    {
-        $tem = User::where('motorista_id', $motorista->id)->where('perfil', 'motorista')->exists();
-
-        return array_merge($motorista->toArray(), [
-            'tem_acesso'   => $tem,
-            'acesso_email' => $tem ? $motorista->cpf : null,
-        ]);
+        // Trocou a senha: derruba as sessões abertas, para valer a senha nova.
+        $usuario->forceFill(['name' => $motorista->nome, 'password' => Hash::make($senha)])->save();
+        $usuario->tokens()->delete();
     }
 
     // DELETE /api/motoristas/{id}/acesso — remove o login (o cadastro do motorista continua).
@@ -238,21 +247,28 @@ class MotoristaController extends Controller
     // Define qual caminhão o motorista conduz: solta o anterior e prende o novo (ou nenhum).
     private function vincular(Motorista $motorista, ?int $caminhaoId): void
     {
+        // 1) Qualquer caminhão que estava com ele fica sem motorista.
         Caminhao::where('motorista_id', $motorista->id)->update(['motorista_id' => null]);
 
+        // 2) O caminhão escolhido passa a ser dele.
         if ($caminhaoId) {
             Caminhao::whereKey($caminhaoId)->update(['motorista_id' => $motorista->id]);
         }
     }
 
     // Algoritmo oficial do CPF: os dois últimos dígitos são calculados a partir dos 9 primeiros.
+    // "public static" = pode ser usado sem criar o controller (MotoristaController::cpfValido(...)).
     public static function cpfValido(?string $cpf): bool
     {
-        $d = preg_replace('/\D/', '', (string) $cpf);
+        $d = preg_replace('/\D/', '', (string) $cpf);   // só os números
+        // (\d)\1{10} = um dígito repetido 11 vezes (111.111.111-11): a conta "fecha", mas não é CPF real.
         if (strlen($d) !== 11 || preg_match('/^(\d)\1{10}$/', $d)) {
             return false; // tamanho errado ou todos os dígitos iguais
         }
 
+        // $t = 9 confere o 1º dígito verificador (posição 9); $t = 10 confere o 2º (posição 10).
+        // Cada dígito é multiplicado por um peso decrescente (10, 9, 8... ou 11, 10, 9...),
+        // soma tudo, e o resto da divisão por 11 dá o dígito esperado.
         for ($t = 9; $t < 11; $t++) {
             $soma = 0;
             for ($i = 0; $i < $t; $i++) {
@@ -293,6 +309,7 @@ class MotoristaController extends Controller
         return $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'cpf'  => [
+                // regex = formato 000.000.000-00 (o merge acima já deixou assim).
                 'required', 'string', 'regex:/^\d{3}\.\d{3}\.\d{3}-\d{2}$/',
                 // Confere os dois dígitos verificadores (recusa CPFs inventados, como 111.111.111-11).
                 function ($atributo, $valor, $falhar) {
@@ -300,14 +317,17 @@ class MotoristaController extends Controller
                         $falhar('CPF inválido. Confira os números digitados.');
                     }
                 },
+                // CPF único, ignorando o próprio motorista na alteração.
                 Rule::unique('motoristas', 'cpf')->ignore($motorista?->id),
             ],
             'cnh'      => ['required', 'digits:11'],
+            // DDD (2 números) + espaço + celular começando com 9.
             'telefone' => ['required', 'regex:/^\d{2} 9\d{4}-\d{4}$/'],
             'ativo'    => ['required', 'boolean'],
             'caminhao_id' => [
                 'nullable', 'integer', 'exists:caminhoes,id',
                 // Recusa um caminhão que já pertence a outro motorista.
+                // "use ($motorista)" = deixa a função enxergar a variável $motorista de fora.
                 function ($atributo, $valor, $falhar) use ($motorista) {
                     $dono = Caminhao::whereKey($valor)->value('motorista_id');
 
@@ -316,7 +336,7 @@ class MotoristaController extends Controller
                     }
                 },
             ],
-            // Opcional: ADM define/redefine a senha (login = CPF).
+            // Senha de acesso do motorista ao app (opcional).
             'acesso_senha' => ['nullable', 'string', 'min:6', 'max:100'],
         ], [
             'cpf.unique'         => 'Já existe um motorista com este CPF.',

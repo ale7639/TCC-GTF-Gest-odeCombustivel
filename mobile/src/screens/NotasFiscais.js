@@ -18,10 +18,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
-import SeletorLista from '../components/SeletorLista';
-import { useToast } from '../ui/Toast';
-import { baixarArquivo } from '../utils/baixarArquivo';
+// Foto que amplia em tela cheia ao tocar.
+import FotoAmpliavel from '../components/FotoAmpliavel';
+import SeletorCaminhao from '../components/SeletorCaminhao';
+import Moldura from '../ui/Moldura';
 import { mascaraMoeda, moeda, moedaParaNumero } from '../utils/formatos';
+import { cores } from '../ui/tema';
 
 const PERIODOS = [
   [7, '7 dias'],
@@ -288,6 +290,16 @@ export default function NotasFiscais() {
 
   const maiorFornecedor = dados?.por_fornecedor?.[0]?.valor ?? 0;
 
+  // Sugestões do campo Fornecedor: compara sem maiúsculas, acentos e pontuação ("volvo" acha "VOLVO Ltda").
+  const normalizar = (t) =>
+    String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const termoFornecedor = normalizar(form.fornecedor);
+  const sugestoesFornecedor = termoFornecedor
+    ? (dados?.fornecedores ?? [])
+        .filter((f) => normalizar(f).includes(termoFornecedor) && normalizar(f) !== termoFornecedor)
+        .slice(0, 5)
+    : [];
+
   const topo = (
     <View>
       <TextInput
@@ -402,67 +414,56 @@ export default function NotasFiscais() {
                 setAtualizando(true);
                 carregar(1);
               }}
-            />
-          }
-          ListEmptyComponent={
-            !carregando && !erro ? <Text style={styles.vazio}>Nenhuma nota fiscal no período.</Text> : null
-          }
-          ListFooterComponent={
-            dados && dados.pagina < dados.ultima_pagina ? (
-              <Pressable
-                style={styles.maisBotao}
-                disabled={carregandoMais}
-                onPress={() => {
-                  setCarregandoMais(true);
-                  carregar(dados.pagina + 1);
-                }}
-              >
-                {carregandoMais ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.maisTexto}>
-                    Carregar mais ({notas.length} de {dados.total})
-                  </Text>
-                )}
-              </Pressable>
-            ) : null
-          }
-          contentContainerStyle={{ paddingBottom: 88 }}
-          renderItem={({ item }) => {
-            const detalhes = aberta === item.chave;
-            return (
-              <Pressable style={styles.caixa} onPress={() => setAberta(detalhes ? null : item.chave)}>
-                <View style={styles.linhaTexto}>
-                  <Text style={styles.numero}>NF {item.numero}</Text>
-                  <Text style={styles.valor}>{moeda(item.valor)}</Text>
-                </View>
-                <Text style={styles.fornecedorItem}>{item.fornecedor}</Text>
-                <Text style={styles.detalhe}>
-                  {item.data_br} · {item.categoria}
+            >
+              {carregandoMais ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.maisTexto}>
+                  Carregar mais ({notas.length} de {dados.total})
                 </Text>
-                <Text style={styles.detalhe}>{item.descricao}</Text>
+              )}
+            </Pressable>
+          ) : null
+        }
+        contentContainerStyle={{ paddingBottom: 24 }}
+        renderItem={({ item }) => {
+          const detalhes = aberta === item.chave;
+          return (
+            <Pressable style={styles.caixa} onPress={() => setAberta(detalhes ? null : item.chave)}>
+              <View style={styles.linhaTexto}>
+                <Text style={styles.numero}>NF {item.numero}</Text>
+                <Text style={styles.valor}>{moeda(item.valor)}</Text>
+              </View>
+              <Text style={styles.fornecedorItem}>{item.fornecedor}</Text>
+              <Text style={styles.detalhe}>
+                {item.data_br} · {item.categoria}
+              </Text>
+              <Text style={styles.detalhe}>{item.descricao}</Text>
 
-                {detalhes && item.foto_url && (
-                  <Image source={{ uri: item.foto_url }} style={styles.foto} resizeMode="contain" />
-                )}
-                {!detalhes && item.foto_url && (
-                  <Text style={styles.verMais}>Toque para ver a foto</Text>
-                )}
-                {item.pode_excluir && (
-                  <Pressable onPress={() => excluir(item)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-                    <Text style={[styles.excluir, confirmando === item.chave && { color: '#dc2626' }]}>
-                      {confirmando === item.chave ? 'Confirmar exclusão' : 'Excluir nota'}
-                    </Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            );
-          }}
-        />
-      </View>
-      <Modal visible={formAberto} animationType="slide" onRequestClose={fecharForm}>
+              {detalhes && item.chave_acesso && (
+                <Text style={styles.chaveAcesso}>Chave de acesso: {item.chave_acesso}</Text>
+              )}
+              {detalhes && item.foto_url && (
+                <FotoAmpliavel uri={item.foto_url} style={styles.foto} resizeMode="contain" />
+              )}
+              {!detalhes && (item.chave_acesso || item.foto_url) && (
+                <Text style={styles.verMais}>Toque para ver {item.foto_url ? 'a foto' : 'a chave de acesso'}</Text>
+              )}
+              {item.pode_excluir && (
+                <Pressable onPress={() => excluir(item)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                  <Text style={[styles.excluir, confirmando === item.chave && { color: cores.perigo }]}>
+                    {confirmando === item.chave ? 'Confirmar exclusão' : 'Excluir nota'}
+                  </Text>
+                </Pressable>
+              )}
+            </Pressable>
+          );
+        }}
+      />
+      <Modal visible={formAberto} animationType="slide" onRequestClose={() => setFormAberto(false)}>
+        <Moldura>
         <ScrollView style={styles.tela} contentContainerStyle={styles.formConteudo} keyboardShouldPersistTaps="handled">
-          <Cabecalho titulo="Nova nota fiscal" aoVoltar={fecharForm} sangrar />
+          <Cabecalho titulo="Nova nota fiscal" aoVoltar={() => setFormAberto(false)} />
           <Text style={styles.detalhe}>
             Notas de combustível entram pelas Entradas do tanque; as de manutenção, no lançamento da manutenção.
           </Text>
@@ -475,16 +476,22 @@ export default function NotasFiscais() {
           </View>
 
           <Campo rotulo="Número da nota" value={form.numero} onChangeText={(v) => mudar('numero', v)} maxLength={20} />
-          <SeletorLista
+          <Campo
             rotulo="Fornecedor"
-            valor={form.fornecedor || null}
-            opcoes={opcoesFornecedorForm}
-            aoMudar={(v) => mudar('fornecedor', v ?? '')}
-            placeholder="Escolher ou digitar fornecedor…"
-            placeholderBusca="Buscar ou digitar novo…"
-            permiteLivre
-            vazio="Digite o nome do fornecedor na busca."
+            placeholder="Digite para ver os já cadastrados"
+            value={form.fornecedor}
+            onChangeText={(v) => mudar('fornecedor', v)}
           />
+          {/* Sugestões: fornecedores já usados que combinam com o que foi digitado */}
+          {sugestoesFornecedor.length > 0 && (
+            <View style={styles.sugestoes}>
+              {sugestoesFornecedor.map((f) => (
+                <Pressable key={f} style={styles.sugestao} onPress={() => mudar('fornecedor', f)}>
+                  <Text style={styles.sugestaoTexto}>{f}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           <Campo
             rotulo="Data de emissão (dd/mm/aaaa)"
             value={form.data}
@@ -505,13 +512,22 @@ export default function NotasFiscais() {
             onChangeText={(v) => mudar('descricao', v)}
           />
 
-          <SeletorLista
-            rotulo="Caminhão (opcional)"
-            valor={form.caminhao_id}
-            opcoes={opcoesCaminhao}
-            aoMudar={(v) => mudar('caminhao_id', v)}
-            placeholder="Nenhum"
-            placeholderBusca="Buscar placa…"
+          <Text style={styles.rotulo}>Caminhão (opcional)</Text>
+          <Text style={styles.detalhe}>Deixe sem caminhão para despesas gerais da empresa.</Text>
+          <SeletorCaminhao
+            caminhoes={caminhoes}
+            selecionadoId={form.caminhao_id}
+            aoEscolher={(c) => mudar('caminhao_id', c.id)}
+            aoRemover={() => mudar('caminhao_id', null)}
+            vazio="Nenhum caminhão cadastrado."
+          />
+
+          <Campo
+            rotulo="Chave de acesso (44 números, opcional)"
+            value={form.chave_acesso}
+            onChangeText={(v) => mudar('chave_acesso', v.replace(/\D/g, '').slice(0, 44))}
+            keyboardType="numeric"
+            maxLength={44}
           />
 
           <Text style={styles.rotulo}>Foto da nota (opcional)</Text>
@@ -535,97 +551,77 @@ export default function NotasFiscais() {
             <Text style={styles.botaoSecundarioTexto}>Cancelar</Text>
           </Pressable>
         </ScrollView>
+        </Moldura>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#f3f4f6' },
-  corpo: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
-  busca: { backgroundColor: '#fff', borderRadius: 10, padding: 12, fontSize: 15, marginBottom: 10 },
+  tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
+  busca: { backgroundColor: '#fff', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: {
+    borderWidth: 1,
+    borderColor: cores.borda,
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  chipAtivo: { backgroundColor: '#dc2626' },
-  chipTexto: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: cores.textoMedio },
   linha: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cartao: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center' },
-  cartaoValor: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  cartaoTitulo: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
-  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
-  secao: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  secaoLista: { fontSize: 18, fontWeight: '600', color: '#111827', marginTop: 8, marginBottom: 8 },
+  cartaoValor: { fontSize: 20, fontWeight: 'bold', color: cores.texto },
+  cartaoTitulo: { fontSize: 12, color: cores.textoSecundario, marginTop: 4, textAlign: 'center' },
+  caixa: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8 },
+  secao: { fontSize: 16, fontWeight: '600', color: cores.texto },
+  secaoLista: { fontSize: 18, fontWeight: '600', color: cores.texto, marginTop: 8, marginBottom: 8 },
   linhaTexto: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  fornecedor: { fontSize: 14, color: '#374151', flexShrink: 1 },
-  valorForn: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  barraFundo: { height: 8, backgroundColor: '#e5e7eb', borderRadius: 4, overflow: 'hidden', marginTop: 4 },
-  barra: { height: 8, backgroundColor: '#dc2626' },
-  erro: { color: '#dc2626', marginTop: 20, textAlign: 'center' },
-  vazio: { textAlign: 'center', color: '#6b7280', marginTop: 30 },
-  numero: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
-  valor: { fontSize: 16, fontWeight: '700', color: '#dc2626' },
-  fornecedorItem: { fontSize: 14, color: '#374151', fontWeight: '600', marginTop: 2 },
-  detalhe: { fontSize: 13, color: '#6b7280', marginTop: 3 },
-  verMais: { fontSize: 12, color: '#dc2626', marginTop: 6, fontWeight: '600' },
-  foto: { height: 220, borderRadius: 8, marginTop: 8, backgroundColor: '#e5e7eb' },
-  maisBotao: { backgroundColor: '#fff', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 4 },
-  maisTexto: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
-  excluir: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
-  acoesTopo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  botaoBaixar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    minWidth: 64,
-    justifyContent: 'center',
-  },
-  botaoBaixarTexto: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  fornecedor: { fontSize: 14, color: cores.textoMedio, flexShrink: 1 },
+  valorForn: { fontSize: 14, fontWeight: '600', color: cores.texto },
+  barraFundo: { height: 8, backgroundColor: cores.bordaClara, borderRadius: 4, overflow: 'hidden', marginTop: 4 },
+  barra: { height: 8, backgroundColor: cores.primaria },
+  erro: { color: cores.perigo, marginTop: 20, textAlign: 'center' },
+  vazio: { textAlign: 'center', color: cores.textoSecundario, marginTop: 30 },
+  numero: { fontSize: 16, fontWeight: 'bold', color: cores.texto },
+  valor: { fontSize: 16, fontWeight: 'bold', color: cores.primaria },
+  fornecedorItem: { fontSize: 14, color: cores.textoMedio, fontWeight: '600', marginTop: 2 },
+  detalhe: { fontSize: 13, color: cores.textoSecundario, marginTop: 3 },
+  chaveAcesso: { fontSize: 12, color: cores.textoMedio, marginTop: 8 },
+  verMais: { fontSize: 12, color: cores.primaria, marginTop: 6, fontWeight: '600' },
+  foto: { height: 220, borderRadius: 8, marginTop: 8, backgroundColor: cores.bordaClara },
+  maisBotao: { borderWidth: 1, borderColor: cores.primaria, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 4 },
+  maisTexto: { color: cores.primaria, fontWeight: '600', fontSize: 15 },
+  excluir: { fontSize: 13, color: cores.textoSecundario, fontWeight: '600' },
   botaoNovo: {
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   botaoNovoTexto: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  formConteudo: {
-    paddingBottom: 40,
-    paddingHorizontal: 16,
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-  },
+  formConteudo: { paddingBottom: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 6 },
   grupo: { marginBottom: 12 },
-  rotulo: { fontSize: 14, color: '#374151', marginBottom: 6, fontWeight: '500' },
-  campo: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 12, fontSize: 16 },
-  opcoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  opcao: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  opcaoAtiva: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-  opcaoTexto: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  avisoFoto: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
-  fotoPreview: { height: 160, borderRadius: 8, marginBottom: 12, backgroundColor: '#e5e7eb' },
-  erroForm: { color: '#dc2626', marginBottom: 12 },
-  botao: { backgroundColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center' },
+  rotulo: { fontSize: 14, color: cores.textoMedio, marginBottom: 6, fontWeight: '500' },
+  campo: { backgroundColor: '#fff', borderWidth: 1, borderColor: cores.borda, borderRadius: 8, padding: 12, fontSize: 16 },
+  erroForm: { color: cores.perigo, marginBottom: 12 },
+  botao: { backgroundColor: cores.primaria, borderRadius: 8, padding: 14, alignItems: 'center' },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   botaoSecundario: { padding: 14, alignItems: 'center', marginTop: 4 },
-  botaoSecundarioTexto: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  botaoSecundarioTexto: { color: cores.textoMedio, fontSize: 16, fontWeight: '600' },
+  sugestoes: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: cores.bordaClara,
+    borderRadius: 8,
+    marginTop: -6,
+    marginBottom: 12,
+  },
+  sugestao: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: cores.bordaClara },
+  sugestaoTexto: { fontSize: 14, color: cores.texto },
 });
