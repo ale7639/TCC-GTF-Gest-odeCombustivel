@@ -1,20 +1,37 @@
 <?php
 
+// =====================================================================================
+// AbastecimentoController — abastecimentos lançados pelo ADMIN (saída de combustível do tanque).
+//
+// Rotas (routes/api.php, grupo do admin):
+//   GET    /api/abastecimentos        -> index()   lista com filtros, páginas e consumo de cada um
+//   POST   /api/abastecimentos        -> store()   registra (já aprovado, sai do tanque na hora)
+//   DELETE /api/abastecimentos/{id}   -> destroy() exclui e devolve os litros ao tanque
+// Não tem "alterar": mexe no estoque e no custo médio; para corrigir, exclui e lança de novo.
+//
+// O motorista lança abastecimentos pelo MeuController (ficam pendentes) e o admin aprova
+// pelo AprovacaoController.
+//
+// CUSTO MÉDIO na saída: custo por litro = valor_estoque ÷ nivel_atual do tanque.
+//   O abastecimento leva litros × custo médio; o que sobra no tanque continua com o mesmo custo.
+// =====================================================================================
+
 namespace App\Http\Controllers;
 
 use App\Models\Abastecimento;
 use App\Models\Caminhao;
 use App\Models\Tanque;
-use App\Support\Quilometragem;
+use App\Support\Quilometragem;               // regra do km: não diminui e não salta mais de 5.000 km
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;           // transações
+use Illuminate\Support\Facades\Storage;      // arquivos (apagar a foto da nota)
 use Illuminate\Validation\ValidationException;
 
 class AbastecimentoController extends Controller
 {
     // Dados de outras tabelas que acompanham cada abastecimento na resposta.
+    // "caminhao:id,placa" = relação caminhao, só as colunas id e placa (resposta mais leve).
     private const RELACOES = ['caminhao:id,placa', 'motorista:id,nome', 'tanque:id,nome'];
 
     // GET /api/abastecimentos — lista com filtros e paginação (20 por página).
@@ -22,37 +39,48 @@ class AbastecimentoController extends Controller
     public function index(Request $request): JsonResponse
     {
         // A lista do admin mostra só o que já foi aprovado (os pendentes ficam em Aprovações).
+        // query() começa uma consulta que vai recebendo filtros antes de ser executada.
         $query = Abastecimento::query()->where('status', 'aprovado');
 
         $busca = trim((string) $request->query('busca', ''));
         if ($busca !== '') {
+            // whereHas('caminhao', ...) = abastecimentos cujo CAMINHÃO tem placa parecida;
+            // orWhereHas('motorista', ...) = OU cujo MOTORISTA tem nome parecido.
+            // like '%texto%' = "contém o texto".
             $query->where(function ($q) use ($busca) {
                 $q->whereHas('caminhao', fn ($c) => $c->where('placa', 'like', '%' . $busca . '%'))
                   ->orWhereHas('motorista', fn ($m) => $m->where('nome', 'like', '%' . $busca . '%'));
             });
         }
 
+        // Atribui e testa ao mesmo tempo: se veio um tanque_id diferente de 0, filtra por ele.
         if ($tanqueId = (int) $request->query('tanque_id')) {
             $query->where('tanque_id', $tanqueId);
         }
 
+        // Período: só aceita 7, 30 ou 90; outro valor (ex.: 0) = tudo.
         $dias = (int) $request->query('dias', 0);
         if (in_array($dias, [7, 30, 90], true)) {
             $query->where('data', '>=', now()->subDays($dias)->toDateString());
         }
 
         // Total de litros de TUDO o que passa pelo filtro (não só da página atual).
+        // clone = cópia da consulta, para somar sem estragar a consulta que ainda vai paginar.
         $totalLitros = (float) (clone $query)->sum('litros');
 
+        // with(...) = eager loading (evita uma consulta por item); paginate(20) = 20 por página.
         $pagina = $query->with(self::RELACOES)
             ->orderByDesc('data')
             ->orderByDesc('id')
             ->paginate(20, ['*'], 'pagina', max(1, (int) $request->query('pagina', 1)));
 
+        // map = transforma cada abastecimento no formato que a tela usa.
         $itens = $pagina->getCollection()->map(function ($a) {
             $data = $a->data->toDateString();
 
             // Quilometragem do abastecimento anterior do mesmo caminhão (base do cálculo de consumo).
+            // "Anterior" = data menor, ou mesma data com id menor (lançado antes).
+            // value('km') = devolve só o km do primeiro resultado.
             $kmAnterior = Abastecimento::where('caminhao_id', $a->caminhao_id)
                 ->where('status', 'aprovado')
                 ->where(function ($q) use ($a, $data) {
@@ -80,10 +108,11 @@ class AbastecimentoController extends Controller
                 'caminhao'     => $a->caminhao,
                 'motorista'    => $a->motorista,
                 'tanque'       => $a->tanque,
-                'origem'       => $a->origem,
+                'origem'       => $a->origem,          // 'base' ou 'externo' (posto)
                 'posto'        => $a->posto,
                 'nota_numero'  => $a->nota_numero,
                 'valor_total'  => $a->valor_total !== null ? (float) $a->valor_total : null,
+                // fotoUrl() (no model) gera o endereço ASSINADO da foto, ou null se não tiver foto.
                 'foto_url'     => $a->fotoUrl(),
             ];
         });
@@ -131,6 +160,7 @@ class AbastecimentoController extends Controller
             $litros = (float) $dados['litros'];
             $km     = (int) $dados['km'];
 
+            // Regras de negócio. "throw" para tudo e a transação desfaz o que já tinha feito.
             if ($caminhao->status !== 'ativo') {
                 throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não está ativo.']);
             }
@@ -139,12 +169,14 @@ class AbastecimentoController extends Controller
                 throw ValidationException::withMessages(['caminhao_id' => 'Este caminhão não tem motorista responsável.']);
             }
 
+            // Não cabe mais litros do que o tanque do caminhão comporta.
             if ($litros > (float) $caminhao->capacidade_tanque) {
                 throw ValidationException::withMessages([
                     'litros' => 'O tanque do caminhão comporta no máximo ' . (float) $caminhao->capacidade_tanque . ' L.',
                 ]);
             }
 
+            // Não sai mais combustível do que o tanque da base tem.
             if ($litros > (float) $tanque->nivel_atual) {
                 throw ValidationException::withMessages([
                     'litros' => 'O ' . $tanque->nome . ' tem apenas ' . (float) $tanque->nivel_atual . ' L.',
@@ -166,11 +198,14 @@ class AbastecimentoController extends Controller
                 'data'         => $dados['data'],
                 'litros'       => $litros,
                 'km'           => $km,
+                // Guarda o custo da hora: se o custo médio mudar depois, este lançamento não muda.
                 'custo_litro'  => round($custoLitro, 4),
                 'custo_total'  => round($custoTotal, 4),
             ]);
 
             // Sai do tanque: os litros e o valor correspondente. O custo médio do que sobra não muda.
+            // Se o tanque esvaziou (quase zero), o valor do estoque vai para 0 (evita sobra de centavos).
+            // max(0, ...) garante que o valor nunca fique negativo.
             $novoNivel = $nivelAntes - $litros;
             $tanque->update([
                 'nivel_atual'   => $novoNivel,
@@ -181,6 +216,7 @@ class AbastecimentoController extends Controller
             return $abastecimento;
         });
 
+        // 201 = criado.
         return response()->json($abastecimento->load(self::RELACOES), 201);
     }
 
@@ -191,6 +227,7 @@ class AbastecimentoController extends Controller
         DB::transaction(function () use ($abastecimento) {
             // Abastecimento fora da base (ou ainda não aprovado) nunca mexeu em tanque: só apaga.
             if (! $abastecimento->tanque_id || $abastecimento->status !== 'aprovado') {
+                // Apaga também o arquivo da foto, para não deixar lixo no disco.
                 if ($abastecimento->foto) {
                     Storage::disk('local')->delete($abastecimento->foto);
                 }
@@ -202,6 +239,7 @@ class AbastecimentoController extends Controller
             $tanque = Tanque::lockForUpdate()->findOrFail($abastecimento->tanque_id);
 
             // Nunca passa da capacidade do tanque (ele pode ter sido reabastecido depois).
+            // min(a, b) = o menor dos dois.
             $novoNivel = min(
                 (float) $tanque->capacidade,
                 (float) $tanque->nivel_atual + (float) $abastecimento->litros
