@@ -92,6 +92,8 @@ class MeuController extends Controller
 
     // POST /api/meu/abastecimentos — na base (sai de um tanque) ou fora da base (posto, com valor e nota).
     // Fica PENDENTE: o tanque e o caminhão só são atualizados quando o admin aprova.
+    // Regra da data: na base, SÓ HOJE (o motorista está na empresa, lança na hora);
+    // fora da base, HOJE OU ONTEM (folga para quando ficou sem sinal na estrada).
     public function abastecer(Request $request): JsonResponse
     {
         $motorista = $request->attributes->get('motorista');
@@ -99,7 +101,23 @@ class MeuController extends Controller
 
         $dados = $request->validate([
             'origem'      => ['required', Rule::in(['base', 'externo'])],
-            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data'        => [
+                'required', 'date_format:Y-m-d', 'before_or_equal:today',
+                // Regra personalizada: confere a data conforme a origem.
+                // now() usa o fuso do config/app.php (America/Sao_Paulo), então "hoje" é o dia daqui.
+                // Datas no formato aaaa-mm-dd podem ser comparadas como texto ("2026-11-21" < "2026-11-22").
+                function ($atributo, $valor, $falhar) use ($request) {
+                    $hoje  = now()->toDateString();
+                    $ontem = now()->subDay()->toDateString();
+
+                    if ($request->input('origem') === 'base' && $valor !== $hoje) {
+                        $falhar('Abastecimento na base só pode ser lançado com a data de hoje.');
+                    }
+                    if ($request->input('origem') === 'externo' && $valor < $ontem) {
+                        $falhar('Abastecimento fora da base só pode ser de hoje ou de ontem.');
+                    }
+                },
+            ],
             'litros'      => ['required', 'numeric', 'min:1', 'max:99999'],
             'km'          => ['required', 'integer', 'min:0'],
             // required_if:origem,base = obrigatório SE a origem for "base".

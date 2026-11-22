@@ -56,6 +56,12 @@ const hoje = () => {
   // padStart(2, '0'): 5 -> "05". getMonth() começa em 0 (janeiro), por isso o +1.
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
+// Ontem, no mesmo formato dd/mm/aaaa (usado no abastecimento fora da base).
+const ontem = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1); // volta um dia (o JavaScript ajusta mês e ano sozinho)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
 // "16/11/2026" -> "2026-11-16" (ou null, se o texto não estiver no formato).
 const paraISO = (texto) => {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto.trim());
@@ -153,6 +159,8 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
     nota_numero: '',
   });
   const [foto, setFoto] = useState(null);
+  // Dia do abastecimento fora da base: 'hoje' ou 'ontem'. Na base é sempre hoje.
+  const [dia, setDia] = useState('hoje');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -173,7 +181,9 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
     const litros = decimal(f.litros);
     const km = Number(f.km);
     const valor = moedaParaNumero(f.valor_total);
-    const data = paraISO(f.data);
+    // Data: na base, sempre hoje; fora da base, hoje ou ontem (o que foi escolhido nos botões).
+    // O backend confere a mesma regra de novo.
+    const data = paraISO(origem === 'externo' && dia === 'ontem' ? ontem() : hoje());
 
     // Conferências antes de enviar (o servidor confere de novo).
     // "!(litros > 0)" também pega NaN (texto inválido), que não é maior que zero.
@@ -249,7 +259,16 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
 
       <Campo rotulo="Litros" value={f.litros} onChangeText={(v) => mudar('litros', v)} keyboardType="decimal-pad" />
       <Campo rotulo="Quilometragem do caminhão" value={f.km} onChangeText={(v) => mudar('km', v)} keyboardType="numeric" />
-      <Campo rotulo="Data (dd/mm/aaaa)" value={f.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
+      {/* Data: na base é sempre hoje (só mostra); fora da base, escolhe hoje ou ontem */}
+      <Text style={styles.rotulo}>Data do abastecimento</Text>
+      {origem === 'base' ? (
+        <Text style={styles.aviso}>Hoje, {hoje()} (abastecimento na base é lançado no mesmo dia)</Text>
+      ) : (
+        <View style={styles.opcoes}>
+          <Opcao texto={`Hoje (${hoje()})`} ativo={dia === 'hoje'} aoTocar={() => setDia('hoje')} />
+          <Opcao texto={`Ontem (${ontem()})`} ativo={dia === 'ontem'} aoTocar={() => setDia('ontem')} />
+        </View>
+      )}
 
       {/* Fora da base: posto, valor, número da nota e foto (opcional) */}
       {origem === 'externo' && (
