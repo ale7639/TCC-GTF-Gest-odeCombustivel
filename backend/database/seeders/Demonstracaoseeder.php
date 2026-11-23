@@ -14,8 +14,9 @@
 // Quem chama: o DatabaseSeeder, depois do AdminSeeder.
 // Uso (APAGA tudo e recria):  php artisan migrate:fresh --seed
 //
-// Login dos motoristas criados: pelo CPF (ver na tela Motoristas) e senha "motorista123".
-// (Os e-mails gravados abaixo são de quando o motorista entrava por e-mail; hoje ele entra só pelo CPF.)
+// Login dos motoristas criados: pelo CPF e senha "motorista123". Os CPFs aparecem no terminal
+// ao final do comando (e na tela Motoristas). Os e-mails gravados abaixo são de quando o motorista
+// entrava por e-mail; hoje ele entra só pelo CPF (o e-mail ficou só para o log de acesso de exemplo).
 // =====================================================================================
 
 namespace Database\Seeders;
@@ -312,9 +313,18 @@ class DemonstracaoSeeder extends Seeder
             ]);
         }
 
-        // Mensagem verde no terminal ao terminar.
-        // Atenção: hoje o motorista entra pelo CPF (ver na tela Motoristas), não por estes e-mails.
-        $this->command?->info('Dados de demonstração criados. Motoristas: carlos@frota.com, joao@frota.com, marcos@frota.com, rafael@frota.com (senha: motorista123).');
+        // Mensagem verde no terminal ao terminar, com os logins para a apresentação.
+        // O motorista entra pelo CPF, então a mensagem mostra o CPF de cada motorista que tem login.
+        // filter(fn ($m, $i) ...) = fica só com quem tem e-mail na lista $pessoas (os que ganharam login);
+        // map = transforma cada um em "Nome: CPF"; implode = junta tudo numa linha por motorista.
+        $comLogin = collect($motoristas)
+            ->filter(fn ($m, $i) => $pessoas[$i][1] !== null)
+            ->map(fn ($m) => '  ' . $m->nome . ': ' . $m->cpf)
+            ->implode(PHP_EOL);
+
+        $this->command?->info('Dados de demonstração criados.');
+        $this->command?->info('Admin: admin@frota.com | senha: admin123');
+        $this->command?->info('Motoristas (entram com o CPF | senha: motorista123):' . PHP_EOL . $comLogin);
     }
 
     // Abastecimento aprovado: sai do tanque principal; se faltar, do reserva; se faltar nos dois

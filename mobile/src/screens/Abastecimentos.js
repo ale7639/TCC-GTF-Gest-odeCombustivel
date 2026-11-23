@@ -1,3 +1,20 @@
+// =====================================================================================
+// Abastecimentos.js — tela "ABASTECIMENTOS" (só o ADMIN acessa).
+//
+// O que a tela faz:
+//   1) Lista os abastecimentos APROVADOS, com busca (placa ou motorista), período e tanque,
+//      o consumo de cada um e "Carregar mais" (20 por vez).
+//   2) "+ Novo" abre o formulário: caminhão, tanque, litros, km e data.
+//   3) CONFIRMAÇÃO em dois passos: "Registrar" mostra um resumo (com quanto fica no tanque e o
+//      custo estimado) e só "Confirmar abastecimento" grava de verdade.
+//   4) Excluir em dois toques (o backend devolve os litros e o valor ao tanque).
+//   5) Pode abrir já filtrada (vinda de um relatório) ou com o formulário aberto (vinda do Painel).
+//
+// Conversa com a API (AbastecimentoController.php):
+//   GET /abastecimentos?pagina=&dias=&busca=&tanque_id= | POST /abastecimentos | DELETE /abastecimentos/{id}
+//   GET /caminhoes e GET /tanques (para o formulário e os filtros)
+// =====================================================================================
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,9 +28,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+// useRoute = lê os parâmetros com que a tela foi aberta (filtro do relatório ou "novo" do Painel).
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { api } from '../api';
 import Cabecalho from '../components/Cabecalho';
+// Componente reutilizável de escolha de caminhão, com busca (mostra até 6 resultados).
 import SeletorCaminhao from '../components/SeletorCaminhao';
 import Moldura from '../ui/Moldura';
 import { cores } from '../ui/tema';
@@ -94,6 +113,7 @@ function Chip({ texto, ativo, aoTocar }) {
 }
 
 // Uma linha "rótulo ........ valor" do resumo de confirmação.
+// Usada no resumo de confirmação: rótulo à esquerda, valor à direita.
 function LinhaResumo({ rotulo, valor }) {
   return (
     <View style={styles.linhaResumo}>
@@ -126,17 +146,21 @@ export default function Abastecimentos() {
   const [formAberto, setFormAberto] = useState(false);
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
+  // null = mostrando o formulário; objeto = mostrando o resumo para confirmar.
   const [confirmacao, setConfirmacao] = useState(null); // resumo mostrado antes de gravar
   const [erroForm, setErroForm] = useState(null);
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
 
   // Só pesquisa 0,4 s depois que a pessoa para de digitar (evita uma chamada a cada letra).
+  // Só pesquisa 0,4 s depois que a pessoa para de digitar (evita chamar a API a cada letra).
   useEffect(() => {
     const timer = setTimeout(() => setBuscaAplicada(busca.trim()), 400);
     return () => clearTimeout(timer);
   }, [busca]);
 
   // Busca uma página da lista com os filtros atuais.
+  // Busca uma página. Página 1 substitui a lista; as próximas juntam no fim.
+  // Depende dos filtros: mudar um filtro recria a função e o useFocusEffect recarrega.
   const carregarLista = useCallback(
     async (numeroPagina = 1) => {
       try {
@@ -165,6 +189,7 @@ export default function Abastecimentos() {
   );
 
   // Caminhões e tanques (para o formulário e para os botões de filtro).
+  // Listas de apoio, buscadas ao mesmo tempo (Promise.all).
   const carregarApoio = useCallback(async () => {
     try {
       const [listaCaminhoes, listaTanques] = await Promise.all([api('/caminhoes'), api('/tanques')]);
@@ -184,9 +209,11 @@ export default function Abastecimentos() {
   );
 
   // Só caminhões ativos e com motorista responsável podem ser abastecidos.
+  // Mesma regra do backend: só caminhão ativo e com motorista (o abastecimento fica no nome dele).
   const caminhoesDisponiveis = caminhoes.filter((c) => c.status === 'ativo' && c.motorista_id);
 
   // Qualquer mudança no formulário cancela o resumo (precisa conferir de novo).
+  // Qualquer mudança apaga o resumo: se o usuário alterou algo, precisa conferir de novo.
   const mudar = (campo, valor) => {
     setConfirmacao(null);
     setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -212,6 +239,7 @@ export default function Abastecimentos() {
   };
 
   // Veio do botão "Abastecer caminhão" do Painel: já abre o formulário.
+  // rota.params = parâmetros recebidos de outra tela.
   const rota = useRoute();
   useEffect(() => {
     if (rota.params?.novo) abrirNovo();
@@ -228,6 +256,7 @@ export default function Abastecimentos() {
   }, [rota.params?.filtro]);
 
   // Passo 1 ("Registrar"): confere os campos e mostra o resumo para o usuário confirmar.
+  // Passo 1 ("Registrar"): confere os campos e monta o resumo. Ainda NÃO grava nada.
   const revisar = () => {
     const litros = Number(String(form.litros).replace(',', '.'));
     const km = Number(form.km);
@@ -252,6 +281,7 @@ export default function Abastecimentos() {
 
     const caminhao = caminhoes.find((c) => c.id === form.caminhao_id);
     const tanque = tanques.find((t) => t.id === form.tanque_id);
+    // Custo estimado = litros × custo médio do tanque (o valor oficial é calculado no backend na hora de gravar).
     const custoMedio = tanque?.custo_medio != null ? Number(tanque.custo_medio) : null;
 
     setErroForm(null);
@@ -268,6 +298,8 @@ export default function Abastecimentos() {
   };
 
   // Passo 2 ("Confirmar abastecimento"): grava de verdade.
+  // Passo 2 ("Confirmar abastecimento"): envia para a API.
+  // Se o servidor recusar (km, estoque, capacidade...), volta ao formulário com a mensagem.
   const confirmar = async () => {
     setSalvando(true);
     setErroForm(null);
@@ -284,6 +316,7 @@ export default function Abastecimentos() {
     }
   };
 
+  // Excluir em dois toques. O backend devolve os litros e o valor ao tanque (sem passar da capacidade).
   const excluir = async (id) => {
     // Primeiro toque: pede confirmação. Segundo toque: exclui.
     if (confirmandoId !== id) {
@@ -303,6 +336,7 @@ export default function Abastecimentos() {
   };
 
   // Parte de cima da lista: busca, filtros e o resumo do que está filtrado.
+  // Topo da lista (ListHeaderComponent): busca, período, tanque e o resumo do que está filtrado.
   const filtros = (
     <View style={styles.filtros}>
       <TextInput
@@ -414,6 +448,7 @@ export default function Abastecimentos() {
                 Custo: {moedaL(item.custo_litro)} · total {moeda(item.custo_total)}
               </Text>
             )}
+            {/* Consumo deste abastecimento: km desde o anterior ÷ litros (calculado no backend). */}
             <Text style={styles.consumo}>
               {item.consumo_km_l != null
                 ? `${consumoFmt(item.consumo_km_l)} km/L · ${numero(item.km_rodados)} km desde o abastecimento anterior`
@@ -466,7 +501,7 @@ export default function Abastecimentos() {
             keyboardType="numeric"
           />
           <Campo
-            rotulo="Data (dd/mm/aaaa)"
+            rotulo="Data (dd/mm/aaaa, até 30 dias atrás)"
             value={form.data}
             onChangeText={(v) => mudar('data', v)}
             maxLength={10}
@@ -474,6 +509,7 @@ export default function Abastecimentos() {
 
           {erroForm && <Text style={styles.erroForm}>{erroForm}</Text>}
 
+          {/* Sem resumo: botão "Registrar". Com resumo: caixa de confirmação. */}
           {!confirmacao ? (
             <>
               <Pressable style={styles.botao} onPress={revisar}>
@@ -521,6 +557,7 @@ export default function Abastecimentos() {
   );
 }
 
+// Estilos (parecido com CSS).
 const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: cores.fundo, paddingHorizontal: 16, paddingTop: 56 },
   titulo: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 4 },

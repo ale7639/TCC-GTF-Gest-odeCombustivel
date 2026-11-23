@@ -1,3 +1,18 @@
+// =====================================================================================
+// Entradas.js — aba "Entradas" da tela Gestão de tanques (só o ADMIN acessa).
+// Não é uma tela do menu: é um componente mostrado dentro de Tanques.js (aba "Entradas").
+//
+// O que faz:
+//   1) Lista as compras de combustível (entradas nos tanques), com o custo médio após cada uma.
+//   2) "+ Nova entrada" abre o formulário: tanque, data, litros, valor e nota fiscal opcional.
+//   3) Mostra uma PRÉVIA do custo médio: como ele fica depois desta compra, antes de salvar.
+//   4) Excluir em dois toques (o backend só deixa se o combustível ainda estiver no tanque).
+//
+// Conversa com a API (EntradaCombustivelController.php e TanqueController.php):
+//   GET /entradas | POST /entradas | DELETE /entradas/{id} | GET /tanques
+// Não tem "alterar": a compra mexe no estoque e no custo médio; para corrigir, exclui e lança de novo.
+// =====================================================================================
+
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +34,7 @@ import { mascaraMoeda, moedaParaNumero } from '../utils/formatos';
 import { cores } from '../ui/tema';
 
 // Funções de formatação.
+// Coloca ponto a cada 3 dígitos: 15000 -> "15.000".
 const separar = (texto) => texto.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const litrosFmt = (n) => {                                            // "273.50" -> "273,5"
   const [inteiro, decimal] = String(Number(n)).split('.');
@@ -29,12 +45,14 @@ const moedaL = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',') + '/L';
 const dataBR = (d) => d.slice(0, 10).split('-').reverse().join('/');  // "2026-10-16..." -> "16/10/2026"
 
 // A tela mostra a data como dd/mm/aaaa; a API recebe aaaa-mm-dd.
+// Data de hoje no formato dd/mm/aaaa (padStart: 5 -> "05"; getMonth começa em 0, por isso +1).
 const hoje = () => {
   const d = new Date();
   const dia = String(d.getDate()).padStart(2, '0');
   const mes = String(d.getMonth() + 1).padStart(2, '0');
   return `${dia}/${mes}/${d.getFullYear()}`;
 };
+// "16/11/2026" -> "2026-11-16" (formato que a API recebe), ou null se estiver fora do formato.
 const paraISO = (texto) => {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto.trim());
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
@@ -47,6 +65,7 @@ const mensagemDe = (e) =>
     : e.message;
 
 // Formulário em branco para uma entrada nova.
+// É uma função para gerar um objeto novo cada vez. Os campos ficam como texto (TextInput só trabalha com texto).
 const formVazio = () => ({
   tanque_id: null,
   data: hoje(),
@@ -68,6 +87,7 @@ function Campo({ rotulo, ...props }) {
 }
 
 // Botão de escolha (usado para o tanque).
+// "ativo" = opção escolhida (fica vermelha).
 function Opcao({ texto, ativo, aoTocar }) {
   return (
     <Pressable onPress={aoTocar} style={[styles.opcao, ativo && styles.opcaoAtiva]}>
@@ -88,8 +108,10 @@ export default function Entradas() {
   const [form, setForm] = useState(formVazio());
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState(null);
+  // id da entrada que espera o segundo toque de "Excluir" (null = nenhuma).
   const [confirmandoId, setConfirmandoId] = useState(null); // item que aguarda o segundo toque para excluir
 
+  // Busca a lista de entradas e a de tanques ao mesmo tempo (Promise.all).
   const carregar = useCallback(async () => {
     try {
       setErro(null);
@@ -125,9 +147,12 @@ export default function Entradas() {
   };
 
   // Pré-visualização: como o custo médio do tanque escolhido muda com esta compra.
+  // find = o primeiro tanque com esse id (ou undefined).
   const tanqueEscolhido = tanques.find((t) => t.id === form.tanque_id);
   const litrosPrev = Number(String(form.litros).replace(',', '.'));
   const valorPrev = moedaParaNumero(form.valor_total);
+  // Mesma conta do backend: custo depois = (valor do estoque + valor da compra) ÷ (litros + litros da compra).
+  // Só aparece quando já há tanque, litros e valor; é só uma prévia, quem grava é o servidor.
   let previa = null;
   if (tanqueEscolhido && litrosPrev > 0 && valorPrev >= 0) {
     const nivel = Number(tanqueEscolhido.nivel_atual);
@@ -139,6 +164,7 @@ export default function Entradas() {
     };
   }
 
+  // Confere os campos e envia a compra. O servidor confere tudo de novo (ex.: espaço livre no tanque).
   const salvar = async () => {
     const litros = Number(String(form.litros).replace(',', '.'));
     const valor = moedaParaNumero(form.valor_total);
@@ -174,6 +200,7 @@ export default function Entradas() {
           // Campos da nota fiscal: vazio vira null (a nota é opcional).
           nf_numero: form.nf_numero.trim() || null,
           nf_fornecedor: form.nf_fornecedor.trim() || null,
+          // Tira tudo que não é número da chave de acesso (a NF-e tem 44 números).
           nf_chave_acesso: form.nf_chave_acesso.replace(/\D/g, '') || null,
         },
       });
@@ -186,6 +213,8 @@ export default function Entradas() {
     }
   };
 
+  // Excluir em dois toques: o primeiro só marca, o segundo apaga.
+  // O backend recusa se parte do combustível já foi usada em abastecimentos.
   const excluir = async (id) => {
     // Primeiro toque: pede confirmação. Segundo toque: exclui.
     if (confirmandoId !== id) {
@@ -243,6 +272,7 @@ export default function Entradas() {
                 </Text>
               </Pressable>
             </View>
+            {/* Data · valor da compra · preço por litro desta compra (valor ÷ litros). */}
             <Text style={styles.detalhe}>
               {dataBR(item.data)} · {moeda(item.valor_total)} ·{' '}
               {moeda(Number(item.valor_total) / Number(item.litros))}/L
@@ -284,7 +314,7 @@ export default function Entradas() {
           </View>
 
           <Campo
-            rotulo="Data (dd/mm/aaaa)"
+            rotulo="Data (dd/mm/aaaa, até 30 dias atrás)"
             value={form.data}
             onChangeText={(v) => mudar('data', v)}
             maxLength={10}
@@ -323,6 +353,7 @@ export default function Entradas() {
             maxLength={54}
           />
 
+          {/* Caixa da prévia do custo médio (antes, esta compra e depois). */}
           {previa && (
             <View style={styles.previa}>
               <Text style={styles.previaTitulo}>Custo médio do tanque</Text>
@@ -354,6 +385,7 @@ export default function Entradas() {
   );
 }
 
+// Estilos (parecido com CSS).
 const styles = StyleSheet.create({
   raiz: { flex: 1 },
   cabecalho: {

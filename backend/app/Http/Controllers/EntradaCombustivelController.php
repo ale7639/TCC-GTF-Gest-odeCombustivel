@@ -48,7 +48,10 @@ class EntradaCombustivelController extends Controller
     {
         $dados = $request->validate([
             'tanque_id'   => ['required', 'integer', 'exists:tanques,id'],
-            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            // Data: não pode ser futura nem de mais de 30 dias atrás (barra erro de digitação, ex.: 2024).
+            // now() usa o fuso America/Sao_Paulo (config/app.php).
+            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today',
+                              'after_or_equal:' . now()->subDays(30)->toDateString()],
             'litros'      => ['required', 'numeric', 'min:1', 'max:99999999'],
             'valor_total' => ['required', 'numeric', 'min:0', 'max:99999999'],
 
@@ -62,6 +65,7 @@ class EntradaCombustivelController extends Controller
             'required'                       => 'Preencha o campo :attribute.',
             'data.date_format'               => 'Data inválida.',
             'data.before_or_equal'           => 'A data não pode ser futura.',
+            'data.after_or_equal'            => 'A data não pode ser de mais de 30 dias atrás.',
             'litros.min'                     => 'Informe pelo menos 1 litro.',
             'tanque_id.exists'               => 'Tanque não encontrado.',
             'nf_numero.required_with'        => 'Informe o número da nota fiscal.',

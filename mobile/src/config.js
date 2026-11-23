@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 // IP do computador na rede, usado só quando o app roda no CELULAR (comando ipconfig).
 // Na versão web (navegador do próprio computador) o endereço é sempre 127.0.0.1.
-const IP_DO_COMPUTADOR = '172.16.8.110';
+const IP_DO_COMPUTADOR = '192.168.1.68';
 
 export const API_URL =
   Platform.OS === 'web'

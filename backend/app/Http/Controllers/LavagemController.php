@@ -69,11 +69,14 @@ class LavagemController extends Controller
             // exists = o caminhão precisa existir na tabela caminhoes.
             'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
             // date_format:Y-m-d = a tela envia aaaa-mm-dd. before_or_equal:today = não aceita data futura.
-            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            // after_or_equal:(hoje - 30 dias) = não aceita data de mais de 30 dias atrás.
+            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today',
+                              'after_or_equal:' . now()->subDays(30)->toDateString()],
             'observacao'  => ['nullable', 'string', 'max:255'],
         ], [
             'required'             => 'Preencha o campo :attribute.',
             'data.before_or_equal' => 'A data não pode ser futura.',
+            'data.after_or_equal'  => 'A data não pode ser de mais de 30 dias atrás.',
         ], ['caminhao_id' => 'caminhão']);
 
         $caminhao = Caminhao::findOrFail($dados['caminhao_id']);
@@ -106,8 +109,18 @@ class LavagemController extends Controller
         $lavagem = Lavagem::findOrFail($id);
 
         // Mesmas regras do cadastro (store) para os campos que podem ser alterados.
+        // O limite de 30 dias só vale se a DATA FOR ALTERADA: assim dá para corrigir a observação
+        // de uma lavagem antiga sem ser barrado.
+        $dataAtual = Carbon::parse($lavagem->data)->toDateString();
         $dados = $request->validate([
-            'data'       => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data'       => [
+                'required', 'date_format:Y-m-d', 'before_or_equal:today',
+                function ($atributo, $valor, $falhar) use ($dataAtual) {
+                    if ($valor !== $dataAtual && $valor < now()->subDays(30)->toDateString()) {
+                        $falhar('A data não pode ser de mais de 30 dias atrás.');
+                    }
+                },
+            ],
             'observacao' => ['nullable', 'string', 'max:255'],
         ], [
             'required'             => 'Preencha o campo :attribute.',

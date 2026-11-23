@@ -92,7 +92,9 @@ class ManutencaoController extends Controller
         // validate(regras, mensagens, nomes dos campos): se algo falhar, responde 422 e para aqui.
         $dados = $request->validate([
             'caminhao_id' => ['required', 'integer', 'exists:caminhoes,id'],
-            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            // Data: não pode ser futura nem de mais de 30 dias atrás (barra erro de digitação, ex.: 2024).
+            'data'        => ['required', 'date_format:Y-m-d', 'before_or_equal:today',
+                              'after_or_equal:' . now()->subDays(30)->toDateString()],
             'tipo'        => ['required', 'string', 'max:255'],
             'descricao'   => ['nullable', 'string', 'max:1000'],
             // min:0 = aceita zero (manutenção sem custo), mas não valor negativo.
@@ -107,6 +109,7 @@ class ManutencaoController extends Controller
         ], [
             'required'                    => 'Preencha o campo :attribute.',
             'data.before_or_equal'        => 'A data não pode ser futura.',
+            'data.after_or_equal'         => 'A data não pode ser de mais de 30 dias atrás.',
             'nf_numero.required_with'     => 'Informe o número da nota fiscal.',
             'nf_fornecedor.required_with' => 'Informe a oficina/fornecedor da nota fiscal.',
             'nf_chave_acesso.digits'      => 'A chave de acesso deve ter 44 números.',
@@ -170,9 +173,22 @@ class ManutencaoController extends Controller
     // o certo é excluir e registrar de novo.
     public function update(Request $request, int $id): JsonResponse
     {
+        // Data que a manutenção tem hoje no banco (para saber se o admin está mudando a data).
+        // findOrFail: se o id não existir, responde 404 sozinho.
+        $dataAtual = Carbon::parse(Manutencao::findOrFail($id)->data)->toDateString();
+
         // Mesmas regras do cadastro (store). Valor 0 é aceito (ex.: serviço feito na garantia).
+        // O limite de 30 dias só vale se a DATA FOR ALTERADA: assim dá para corrigir a descrição
+        // ou o valor de uma manutenção antiga sem ser barrado.
         $dados = $request->validate([
-            'data'      => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data'      => [
+                'required', 'date_format:Y-m-d', 'before_or_equal:today',
+                function ($atributo, $valor, $falhar) use ($dataAtual) {
+                    if ($valor !== $dataAtual && $valor < now()->subDays(30)->toDateString()) {
+                        $falhar('A data não pode ser de mais de 30 dias atrás.');
+                    }
+                },
+            ],
             'tipo'      => ['required', 'string', 'max:255'],
             'descricao' => ['nullable', 'string', 'max:1000'],
             'valor'     => ['required', 'numeric', 'min:0', 'max:9999999'],

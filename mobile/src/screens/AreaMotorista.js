@@ -301,14 +301,14 @@ function FormAbastecimento({ caminhao, aoFechar, aoEnviado }) {
 
 // ---------- Lavagem ----------
 // Feita na própria empresa: sem custo, só a data em que o caminhão foi lavado.
+// Data: hoje ou ontem (botões). O backend confere a mesma regra de novo.
 function FormLavagem({ aoFechar, aoEnviado }) {
-  const [data, setData] = useState(hoje());
+  const [dia, setDia] = useState('hoje'); // 'hoje' ou 'ontem'
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
 
   const enviar = async () => {
-    const iso = paraISO(data);
-    if (!iso) return setErro('Informe a data no formato dd/mm/aaaa.');
+    const iso = paraISO(dia === 'ontem' ? ontem() : hoje());
 
     setEnviando(true);
     setErro(null);
@@ -324,7 +324,12 @@ function FormLavagem({ aoFechar, aoEnviado }) {
 
   return (
     <Formulario titulo="Nova lavagem" visivel aoFechar={aoFechar} aoEnviar={enviar} enviando={enviando} erro={erro}>
-      <Campo rotulo="Data da lavagem (dd/mm/aaaa)" value={data} onChangeText={setData} maxLength={10} />
+      {/* Data: o motorista só escolhe entre hoje e ontem */}
+      <Text style={styles.rotulo}>Data da lavagem</Text>
+      <View style={styles.opcoes}>
+        <Opcao texto={`Hoje (${hoje()})`} ativo={dia === 'hoje'} aoTocar={() => setDia('hoje')} />
+        <Opcao texto={`Ontem (${ontem()})`} ativo={dia === 'ontem'} aoTocar={() => setDia('ontem')} />
+      </View>
     </Formulario>
   );
 }
@@ -334,12 +339,13 @@ const TIPOS_MANUTENCAO = ['Troca de óleo', 'Pneus', 'Freios', 'Revisão'];
 
 function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
   const [f, setF] = useState({
-    data: hoje(),
     tipo: '',
     descricao: '',
     valor: '',
     km: String(caminhao.km_atual),
   });
+  // Data: hoje ou ontem (botões). O backend confere a mesma regra de novo.
+  const [dia, setDia] = useState('hoje');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
   const mudar = (campo, valor) => setF((atual) => ({ ...atual, [campo]: valor }));
@@ -349,7 +355,7 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
     // (A máscara de dinheiro apaga o zero digitado, por isso o vazio vale como zero.)
     const valor = f.valor === '' ? 0 : moedaParaNumero(f.valor);
     const km = Number(f.km);
-    const data = paraISO(f.data);
+    const data = paraISO(dia === 'ontem' ? ontem() : hoje());
     if (!f.tipo.trim()) return setErro('Informe o tipo de manutenção.');
     if (!data) return setErro('Informe a data no formato dd/mm/aaaa.');
     if (Number.isNaN(valor) || valor < 0) return setErro('Informe um valor válido.');
@@ -388,7 +394,12 @@ function FormManutencao({ caminhao, aoFechar, aoEnviado }) {
         keyboardType="numeric"
       />
       <Campo rotulo="Quilometragem do caminhão" value={f.km} onChangeText={(v) => mudar('km', v)} keyboardType="numeric" />
-      <Campo rotulo="Data (dd/mm/aaaa)" value={f.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
+      {/* Data: o motorista só escolhe entre hoje e ontem */}
+      <Text style={styles.rotulo}>Data da manutenção</Text>
+      <View style={styles.opcoes}>
+        <Opcao texto={`Hoje (${hoje()})`} ativo={dia === 'hoje'} aoTocar={() => setDia('hoje')} />
+        <Opcao texto={`Ontem (${ontem()})`} ativo={dia === 'ontem'} aoTocar={() => setDia('ontem')} />
+      </View>
     </Formulario>
   );
 }

@@ -7,8 +7,8 @@
 //   GET  /api/meu/painel          -> painel()    o caminhão dele + histórico dos lançamentos
 //   GET  /api/meu/tanques         -> tanques()   tanques para escolher (sem nível e sem custo)
 //   POST /api/meu/abastecimentos  -> abastecer() fica PENDENTE até o admin aprovar
-//   POST /api/meu/lavagens        -> lavar()     vale na hora
-//   POST /api/meu/manutencoes     -> manter()    vale na hora
+//   POST /api/meu/lavagens        -> lavar()     vale na hora (data: hoje ou ontem)
+//   POST /api/meu/manutencoes     -> manter()    vale na hora (data: hoje ou ontem)
 //
 // SEGURANÇA: o motorista e o caminhão vêm do LOGIN (token), nunca do que o app envia.
 // O middleware ApenasMotorista confere o perfil e coloca o motorista logado em
@@ -183,8 +183,17 @@ class MeuController extends Controller
         $caminhao  = $this->caminhaoDe($motorista);
 
         // Lavagem é feita na própria empresa: sem custo, só a data (observação é opcional).
+        // Regra da data: HOJE OU ONTEM (mesma folga do abastecimento fora da base).
         $dados = $request->validate([
-            'data'       => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data'       => [
+                'required', 'date_format:Y-m-d', 'before_or_equal:today',
+                // Bloqueia data anterior a ontem. now() usa o fuso America/Sao_Paulo.
+                function ($atributo, $valor, $falhar) {
+                    if ($valor < now()->subDay()->toDateString()) {
+                        $falhar('A lavagem só pode ser lançada com a data de hoje ou de ontem.');
+                    }
+                },
+            ],
             'observacao' => ['nullable', 'string', 'max:255'],
         ], [
             'required'             => 'Preencha o campo :attribute.',
@@ -210,8 +219,17 @@ class MeuController extends Controller
         $motorista = $request->attributes->get('motorista');
         $caminhao  = $this->caminhaoDe($motorista);
 
+        // Regra da data: HOJE OU ONTEM (a manutenção pode ter sido feita na estrada, sem sinal).
         $dados = $request->validate([
-            'data'      => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data'      => [
+                'required', 'date_format:Y-m-d', 'before_or_equal:today',
+                // Bloqueia data anterior a ontem. now() usa o fuso America/Sao_Paulo.
+                function ($atributo, $valor, $falhar) {
+                    if ($valor < now()->subDay()->toDateString()) {
+                        $falhar('A manutenção só pode ser lançada com a data de hoje ou de ontem.');
+                    }
+                },
+            ],
             'tipo'      => ['required', 'string', 'max:255'],
             'descricao' => ['nullable', 'string', 'max:1000'],
             // min:0 = aceita zero (sem custo), mas não negativo.

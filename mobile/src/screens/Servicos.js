@@ -471,7 +471,7 @@ export default function Servicos() {
             </View>
           )}
 
-          <Campo rotulo="Data (dd/mm/aaaa)" value={form.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
+          <Campo rotulo="Data (dd/mm/aaaa, até 30 dias atrás)" value={form.data} onChangeText={(v) => mudar('data', v)} maxLength={10} />
 
           {/* Campos de manutenção ou de lavagem, conforme a aba */}
           {ehManutencao ? (
